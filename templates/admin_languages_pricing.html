@@ -1,0 +1,426 @@
+{% extends "base.html" %}
+
+{% block title %}Language & Pricing Management - VoiceScript Collector{% endblock %}
+
+{% block content %}
+<div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <!-- Header -->
+    <div class="bg-white rounded-lg shadow-sm p-6 mb-8">
+        <h1 class="text-2xl font-bold text-gray-900">Language & Pricing Management</h1>
+        <p class="text-gray-600 mt-1">Manage languages and their payment rates in one place</p>
+    </div>
+
+    <!-- Add Language Button -->
+    <div class="mb-6">
+        <button onclick="showAddLanguageModal()" class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700">
+            <i class="fas fa-plus mr-2"></i>
+            Add New Language
+        </button>
+    </div>
+
+    <!-- Languages & Pricing Table -->
+    <div class="bg-white rounded-lg shadow-sm">
+        <div class="px-6 py-4 border-b border-gray-200">
+            <h2 class="text-lg font-semibold text-gray-900">Languages & Payment Rates</h2>
+        </div>
+        <div class="overflow-x-auto">
+            <table class="min-w-full divide-y divide-gray-200">
+                <thead class="bg-gray-50">
+                    <tr>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Language</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Code</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Provider Rate<br><span class="text-xs normal-case text-gray-400">(per word)</span></th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Reviewer Rate<br><span class="text-xs normal-case text-gray-400">(per submission)</span></th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Currency</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                    </tr>
+                </thead>
+                <tbody class="bg-white divide-y divide-gray-200">
+                    {% for language in languages %}
+                    {% set pricing = pricing_dict.get(language.code) %}
+                    <tr id="row-{{ language.code }}">
+                        <td class="px-6 py-4 whitespace-nowrap">
+                            <div class="text-sm font-medium text-gray-900">{{ language.name }}</div>
+                            {% if language.native_name %}
+                            <div class="text-sm text-gray-500">{{ language.native_name }}</div>
+                            {% endif %}
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{{ language.code.upper() }}</td>
+                        <td class="px-6 py-4 whitespace-nowrap">
+                            <div class="flex items-center">
+                                <span class="text-gray-500 mr-1">
+                                    {% if pricing and pricing.currency == 'EUR' %}€
+                                    {% elif pricing and pricing.currency == 'BDT' %}৳
+                                    {% elif pricing and pricing.currency == 'GBP' %}£
+                                    {% elif pricing and pricing.currency == 'JPY' %}¥
+                                    {% elif pricing and pricing.currency == 'INR' %}₹
+                                    {% elif pricing and pricing.currency == 'CAD' %}C$
+                                    {% elif pricing and pricing.currency == 'AUD' %}A$
+                                    {% else %}${% endif %}
+                                </span>
+                                <input type="number" 
+                                       step="0.001" 
+                                       min="0" 
+                                       value="{{ '%.3f'|format(pricing.provider_rate_per_word if pricing else 0.010) }}"
+                                       class="provider-rate w-20 px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                       data-language="{{ language.code }}"
+                                       placeholder="0.010">
+                            </div>
+
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap">
+                            <div class="flex items-center">
+                                <span class="text-gray-500 mr-1">
+                                    {% if pricing and pricing.currency == 'EUR' %}€
+                                    {% elif pricing and pricing.currency == 'BDT' %}৳
+                                    {% elif pricing and pricing.currency == 'GBP' %}£
+                                    {% elif pricing and pricing.currency == 'JPY' %}¥
+                                    {% elif pricing and pricing.currency == 'INR' %}₹
+                                    {% elif pricing and pricing.currency == 'CAD' %}C$
+                                    {% elif pricing and pricing.currency == 'AUD' %}A$
+                                    {% else %}${% endif %}
+                                </span>
+                                <input type="number" 
+                                       step="0.01" 
+                                       min="0" 
+                                       value="{{ '%.2f'|format(pricing.reviewer_rate_per_submission if pricing else 2.00) }}"
+                                       class="reviewer-rate w-20 px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                       data-language="{{ language.code }}"
+                                       placeholder="2.00">
+                            </div>
+
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap">
+                            <select class="currency-select text-sm border border-gray-300 rounded px-2 py-1 focus:outline-none focus:ring-2 focus:ring-blue-500" data-language="{{ language.code }}">
+                                <option value="USD" {% if pricing and pricing.currency == 'USD' %}selected{% endif %}>USD ($)</option>
+                                <option value="EUR" {% if pricing and pricing.currency == 'EUR' %}selected{% endif %}>EUR (€)</option>
+                                <option value="BDT" {% if pricing and pricing.currency == 'BDT' %}selected{% endif %}>BDT (৳)</option>
+                                <option value="GBP" {% if pricing and pricing.currency == 'GBP' %}selected{% endif %}>GBP (£)</option>
+                                <option value="JPY" {% if pricing and pricing.currency == 'JPY' %}selected{% endif %}>JPY (¥)</option>
+                                <option value="INR" {% if pricing and pricing.currency == 'INR' %}selected{% endif %}>INR (₹)</option>
+                                <option value="CAD" {% if pricing and pricing.currency == 'CAD' %}selected{% endif %}>CAD (C$)</option>
+                                <option value="AUD" {% if pricing and pricing.currency == 'AUD' %}selected{% endif %}>AUD (A$)</option>
+                            </select>
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                            <button onclick="editLanguage('{{ language.code }}')" class="text-blue-600 hover:text-blue-900 mr-3">
+                                <i class="fas fa-edit mr-1"></i>Edit
+                            </button>
+                            <button onclick="updatePricing('{{ language.code }}')" class="text-green-600 hover:text-green-900">
+                                <i class="fas fa-save mr-1"></i>Save
+                            </button>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="mt-6">
+        <a href="{{ url_for('admin_dashboard') }}" 
+           class="inline-flex items-center text-gray-600 hover:text-gray-900">
+            <i class="fas fa-arrow-left mr-2"></i>
+            Back to Admin Dashboard
+        </a>
+    </div>
+</div>
+
+<!-- Add Language Modal -->
+<div id="addLanguageModal" class="fixed inset-0 bg-gray-600 bg-opacity-50 hidden items-center justify-center">
+    <div class="bg-white rounded-lg shadow-xl p-6 w-full max-w-2xl">
+        <h3 class="text-lg font-semibold text-gray-900 mb-4">Add New Language</h3>
+        <form id="addLanguageForm">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Language Name</label>
+                    <input type="text" name="name" required class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500" placeholder="e.g., Portuguese">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Language Code</label>
+                    <input type="text" name="code" required class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500" placeholder="e.g., pt">
+                </div>
+            </div>
+            <div class="mb-4">
+                <label class="block text-sm font-medium text-gray-700 mb-2">Native Name</label>
+                <input type="text" name="native_name" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500" placeholder="e.g., Português">
+            </div>
+            
+            <!-- Pricing Rates Section -->
+            <div class="border-t pt-4 mb-6">
+                <h4 class="text-sm font-medium text-gray-900 mb-3">Payment Rates</h4>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Currency</label>
+                        <select name="currency" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500">
+                            <option value="USD">USD ($)</option>
+                            <option value="EUR">EUR (€)</option>
+                            <option value="BDT">BDT (৳)</option>
+                            <option value="GBP">GBP (£)</option>
+                            <option value="JPY">JPY (¥)</option>
+                            <option value="INR">INR (₹)</option>
+                            <option value="CAD">CAD (C$)</option>
+                            <option value="AUD">AUD (A$)</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Provider Rate (per word)</label>
+                        <input type="number" 
+                               name="provider_rate" 
+                               step="0.001"
+                               min="0"
+                               value="0.010"
+                               placeholder="0.010"
+                               class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Reviewer Rate (per submission)</label>
+                        <input type="number" 
+                               name="reviewer_rate" 
+                               step="0.01"
+                               min="0"
+                               value="2.00"
+                               placeholder="2.00"
+                               class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500">
+                    </div>
+                </div>
+            </div>
+            
+            <div class="flex justify-end space-x-3">
+                <button type="button" onclick="hideAddLanguageModal()" class="px-4 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50">Cancel</button>
+                <button type="submit" class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700">Add Language</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+function showAddLanguageModal() {
+    document.getElementById('addLanguageModal').classList.remove('hidden');
+    document.getElementById('addLanguageModal').classList.add('flex');
+}
+
+function hideAddLanguageModal() {
+    document.getElementById('addLanguageModal').classList.add('hidden');
+    document.getElementById('addLanguageModal').classList.remove('flex');
+}
+
+function editLanguage(languageCode) {
+    // Fetch language and pricing data from server
+    Promise.all([
+        fetch(`/api/languages/${languageCode}`).then(r => r.json()),
+        fetch(`/api/pricing/${languageCode}`).then(r => r.json())
+    ])
+    .then(([languageData, pricingData]) => {
+        showEditLanguageModal({
+            ...languageData,
+            pricing: pricingData
+        });
+    })
+    .catch(error => {
+        console.error('Error fetching language data:', error);
+        alert('Error loading language data');
+    });
+}
+
+function showEditLanguageModal(languageData) {
+    // Create and show edit modal
+    const modal = document.createElement('div');
+    modal.id = 'editLanguageModal';
+    modal.className = 'fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center';
+    modal.innerHTML = `
+        <div class="bg-white rounded-lg shadow-xl p-6 w-full max-w-2xl">
+            <h3 class="text-lg font-semibold text-gray-900 mb-4">Edit Language</h3>
+            <form id="editLanguageForm">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Language Name</label>
+                        <input type="text" name="name" required value="${languageData.name}" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Language Code</label>
+                        <input type="text" name="code" readonly value="${languageData.code}" class="w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-100">
+                    </div>
+                </div>
+                <div class="mb-4">
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Native Name</label>
+                    <input type="text" name="native_name" value="${languageData.native_name || ''}" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500">
+                </div>
+                
+                <!-- Pricing Section -->
+                <div class="border-t pt-4 mb-6">
+                    <h4 class="text-sm font-medium text-gray-900 mb-3">Payment Rates</h4>
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-2">Currency</label>
+                            <select name="currency" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500">
+                                <option value="USD" ${(languageData.pricing?.currency || 'USD') === 'USD' ? 'selected' : ''}>USD ($)</option>
+                                <option value="EUR" ${(languageData.pricing?.currency || 'USD') === 'EUR' ? 'selected' : ''}>EUR (€)</option>
+                                <option value="BDT" ${(languageData.pricing?.currency || 'USD') === 'BDT' ? 'selected' : ''}>BDT (৳)</option>
+                                <option value="GBP" ${(languageData.pricing?.currency || 'USD') === 'GBP' ? 'selected' : ''}>GBP (£)</option>
+                                <option value="JPY" ${(languageData.pricing?.currency || 'USD') === 'JPY' ? 'selected' : ''}>JPY (¥)</option>
+                                <option value="INR" ${(languageData.pricing?.currency || 'USD') === 'INR' ? 'selected' : ''}>INR (₹)</option>
+                                <option value="CAD" ${(languageData.pricing?.currency || 'USD') === 'CAD' ? 'selected' : ''}>CAD (C$)</option>
+                                <option value="AUD" ${(languageData.pricing?.currency || 'USD') === 'AUD' ? 'selected' : ''}>AUD (A$)</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-2">Provider Rate (per word)</label>
+                            <input type="number" name="provider_rate" step="0.001" min="0" value="${languageData.pricing?.provider_rate_per_word || 0.010}" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-2">Reviewer Rate (per submission)</label>
+                            <input type="number" name="reviewer_rate" step="0.01" min="0" value="${languageData.pricing?.reviewer_rate_per_submission || 2.00}" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500">
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="flex justify-end space-x-3">
+                    <button type="button" onclick="hideEditLanguageModal()" class="px-4 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50">Cancel</button>
+                    <button type="submit" class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700">Update Language</button>
+                </div>
+            </form>
+        </div>
+    `;
+    
+    document.body.appendChild(modal);
+    
+    // Add form handler
+    document.getElementById('editLanguageForm').addEventListener('submit', function(e) {
+        e.preventDefault();
+        
+        const formData = new FormData(this);
+        const updateData = {
+            name: formData.get('name'),
+            native_name: formData.get('native_name'),
+            provider_rate: parseFloat(formData.get('provider_rate')) || 0.010,
+            reviewer_rate: parseFloat(formData.get('reviewer_rate')) || 2.00,
+            currency: formData.get('currency') || 'USD'
+        };
+        
+        fetch(`/api/languages/${languageData.code}`, {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(updateData)
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                hideEditLanguageModal();
+                location.reload();
+            } else {
+                alert('Error updating language: ' + (data.error || 'Unknown error'));
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('Error updating language');
+        });
+    });
+}
+
+function hideEditLanguageModal() {
+    const modal = document.getElementById('editLanguageModal');
+    if (modal) {
+        modal.remove();
+    }
+}
+
+function updatePricing(languageCode) {
+    const row = document.getElementById(`row-${languageCode}`);
+    const providerRate = row.querySelector('.provider-rate').value;
+    const reviewerRate = row.querySelector('.reviewer-rate').value;
+    const currency = row.querySelector('.currency-select').value;
+    
+    fetch('/api/pricing/update', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+            language_code: languageCode,
+            provider_rate: parseFloat(providerRate),
+            reviewer_rate: parseFloat(reviewerRate),
+            currency: currency
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            // Update currency symbols in the row
+            updateCurrencySymbols(row, currency);
+            showMessage('Pricing updated successfully for ' + languageCode.toUpperCase(), 'success');
+        } else {
+            showMessage('Error updating pricing', 'error');
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        showMessage('Error updating pricing', 'error');
+    });
+}
+
+function updateCurrencySymbols(row, currency) {
+    const symbols = {
+        'USD': '$', 'EUR': '€', 'BDT': '৳', 'GBP': '£', 
+        'JPY': '¥', 'INR': '₹', 'CAD': 'C$', 'AUD': 'A$'
+    };
+    const symbol = symbols[currency] || '$';
+    
+    row.querySelectorAll('span.text-gray-500').forEach(span => {
+        if (span.textContent.match(/[$€৳£¥₹]|C\$|A\$/)) {
+            span.textContent = symbol;
+        }
+    });
+}
+
+function showMessage(message, type) {
+    const alertClass = type === 'success' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800';
+    const alert = document.createElement('div');
+    alert.className = `fixed top-4 right-4 px-4 py-2 rounded-md ${alertClass} z-50`;
+    alert.textContent = message;
+    document.body.appendChild(alert);
+    
+    setTimeout(() => {
+        alert.remove();
+    }, 3000);
+}
+
+document.getElementById('addLanguageForm').addEventListener('submit', function(e) {
+    e.preventDefault();
+    
+    const formData = new FormData(this);
+    const languageData = {
+        name: formData.get('name'),
+        code: formData.get('code'),
+        native_name: formData.get('native_name'),
+        provider_rate: parseFloat(formData.get('provider_rate')) || 0.010,
+        reviewer_rate: parseFloat(formData.get('reviewer_rate')) || 2.00,
+        currency: formData.get('currency') || 'USD'
+    };
+    
+    fetch('/api/languages', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(languageData)
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            hideAddLanguageModal();
+            location.reload();
+        } else {
+            alert('Error adding language: ' + (data.error || 'Unknown error'));
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('Error adding language');
+    });
+});
+</script>
+{% endblock %}

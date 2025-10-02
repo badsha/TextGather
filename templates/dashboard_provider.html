@@ -1,0 +1,270 @@
+{% extends "base.html" %}
+
+{% block title %}Provider Dashboard - VoiceScript Collector{% endblock %}
+
+{% block content %}
+<div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <!-- Welcome Header -->
+    <div class="bg-white rounded-lg shadow-sm p-6 mb-8">
+        <h1 class="text-2xl font-bold text-gray-900">Welcome back, {{ user.first_name }}!</h1>
+        <p class="text-gray-600 mt-1">Ready to contribute to NLP training data? Start recording or submit text content below.</p>
+    </div>
+
+    <!-- Stats Cards -->
+    <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-2 lg:grid-cols-5 gap-4 sm:gap-6 mb-8">
+        <div class="bg-white overflow-hidden shadow-sm rounded-lg">
+            <div class="p-5">
+                <div class="flex items-center">
+                    <div class="flex-shrink-0">
+                        <i class="fas fa-file-text text-2xl text-blue-600"></i>
+                    </div>
+                    <div class="ml-5 w-0 flex-1">
+                        <dl>
+                            <dt class="text-sm font-medium text-gray-500 truncate">Total Submissions</dt>
+                            <dd class="text-lg font-medium text-gray-900">{{ stats.total_submissions }}</dd>
+                        </dl>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="bg-white overflow-hidden shadow-sm rounded-lg">
+            <div class="p-5">
+                <div class="flex items-center">
+                    <div class="flex-shrink-0">
+                        <i class="fas fa-check-circle text-2xl text-green-600"></i>
+                    </div>
+                    <div class="ml-5 w-0 flex-1">
+                        <dl>
+                            <dt class="text-sm font-medium text-gray-500 truncate">Approved</dt>
+                            <dd class="text-lg font-medium text-gray-900">{{ stats.approved }}</dd>
+                        </dl>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="bg-white overflow-hidden shadow-sm rounded-lg">
+            <div class="p-5">
+                <div class="flex items-center">
+                    <div class="flex-shrink-0">
+                        <i class="fas fa-clock text-2xl text-yellow-600"></i>
+                    </div>
+                    <div class="ml-5 w-0 flex-1">
+                        <dl>
+                            <dt class="text-sm font-medium text-gray-500 truncate">Pending</dt>
+                            <dd class="text-lg font-medium text-gray-900">{{ stats.pending }}</dd>
+                        </dl>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="bg-white overflow-hidden shadow-sm rounded-lg">
+            <div class="p-5">
+                <div class="flex items-center">
+                    <div class="flex-shrink-0">
+                        <i class="fas fa-times-circle text-2xl text-red-600"></i>
+                    </div>
+                    <div class="ml-5 w-0 flex-1">
+                        <dl>
+                            <dt class="text-sm font-medium text-gray-500 truncate">Rejected</dt>
+                            <dd class="text-lg font-medium text-gray-900">{{ stats.rejected }}</dd>
+                        </dl>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        {% if global_show_earnings %}
+        <div class="bg-white overflow-hidden shadow-sm rounded-lg">
+            <div class="p-5">
+                <div class="flex items-center">
+                    <div class="flex-shrink-0">
+                        <i class="fas fa-dollar-sign text-2xl text-purple-600"></i>
+                    </div>
+                    <div class="ml-5 w-0 flex-1">
+                        <dl>
+                            <dt class="text-sm font-medium text-gray-500 truncate">Earnings</dt>
+                            <dd class="text-lg font-medium text-gray-900">${{ stats.earnings }}</dd>
+                        </dl>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- Quick Actions -->
+    <div class="mb-8">
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-8">
+            <div class="bg-white rounded-lg shadow-sm p-6">
+                <h2 class="text-lg font-semibold text-gray-900 mb-4">
+                    <i class="fas fa-microphone text-blue-600 mr-2"></i>
+                    Browse Scripts
+                </h2>
+                <p class="text-gray-600 mb-4">Browse and select from available scripts manually for recording.</p>
+                <a href="{{ url_for('record_list') }}" class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700">
+                    Browse Scripts
+                    <i class="fas fa-arrow-right ml-2"></i>
+                </a>
+            </div>
+
+            <div class="bg-white rounded-lg shadow-sm p-6">
+                <h2 class="text-lg font-semibold text-gray-900 mb-4">
+                    <i class="fas fa-edit text-green-600 mr-2"></i>
+                    Free-Form Submission
+                </h2>
+                <p class="text-gray-600 mb-4">Submit your own custom text content with optional audio recordings.</p>
+                <a href="{{ url_for('record_script', script_id=0) }}" class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-green-600 hover:bg-green-700">
+                    Create Submission
+                    <i class="fas fa-arrow-right ml-2"></i>
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <!-- Recent Submissions -->
+    <div class="bg-white rounded-lg shadow-sm">
+        <div class="px-4 sm:px-6 py-4 border-b border-gray-200">
+            <h2 class="text-lg font-semibold text-gray-900">Recent Submissions</h2>
+        </div>
+        
+        {% if submissions %}
+        <!-- Mobile Card View -->
+        <div class="block md:hidden divide-y divide-gray-200">
+            {% for submission in submissions %}
+            <div class="p-4 hover:bg-gray-50">
+                <div class="flex justify-between items-start mb-2">
+                    <div class="flex-1 min-w-0">
+                        <p class="text-sm font-medium text-gray-900 truncate">
+                            {% if submission.script %}
+                                {{ submission.script.title }}
+                            {% else %}
+                                Custom Content
+                            {% endif %}
+                        </p>
+                        <p class="text-sm text-gray-500 line-clamp-2">{{ submission.text_content }}</p>
+                    </div>
+                    <span class="ml-2 inline-flex px-2 py-1 text-xs font-semibold rounded-full shrink-0
+                        {% if submission.status == 'approved' %}bg-green-100 text-green-800
+                        {% elif submission.status == 'rejected' %}bg-red-100 text-red-800
+                        {% else %}bg-yellow-100 text-yellow-800{% endif %}">
+                        {{ submission.status.title() }}
+                    </span>
+                </div>
+                
+                <div class="flex items-center justify-between text-sm text-gray-500 mt-2">
+                    <div class="flex items-center space-x-3">
+                        <span>
+                            {% if submission.audio_filename %}
+                                <i class="fas fa-microphone text-blue-600 mr-1"></i> Audio
+                            {% else %}
+                                <i class="fas fa-file-text text-gray-600 mr-1"></i> Text
+                            {% endif %}
+                        </span>
+                        <span>{{ submission.word_count or 0 }} words</span>
+                    </div>
+                    <span>{{ submission.created_at.strftime('%b %d') }}</span>
+                </div>
+                
+                {% if submission.audio_filename or submission.status == 'pending' %}
+                <div class="flex items-center space-x-2 mt-3">
+                    {% if submission.audio_filename %}
+                    <audio controls class="flex-1 h-8 max-w-xs">
+                        <source src="{{ url_for('uploaded_file', filename=submission.audio_filename) }}" type="audio/mp4">
+                    </audio>
+                    {% endif %}
+                    
+                    {% if submission.status == 'pending' %}
+                    <form method="POST" action="{{ url_for('delete_submission', submission_id=submission.id) }}" class="inline" onsubmit="return confirm('Are you sure you want to delete this submission?')">
+                        <button type="submit" class="p-2 text-red-600 hover:bg-red-50 rounded-md" title="Delete">
+                            <i class="fas fa-trash-alt"></i>
+                        </button>
+                    </form>
+                    {% endif %}
+                </div>
+                {% endif %}
+            </div>
+            {% endfor %}
+        </div>
+        
+        <!-- Desktop Table View -->
+        <div class="hidden md:block overflow-x-auto">
+            <table class="min-w-full divide-y divide-gray-200">
+                <thead class="bg-gray-50">
+                    <tr>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Content</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Type</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Words</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Submitted</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Audio / Actions</th>
+                    </tr>
+                </thead>
+                <tbody class="bg-white divide-y divide-gray-200">
+                    {% for submission in submissions %}
+                    <tr>
+                        <td class="px-6 py-4">
+                            <div class="text-sm text-gray-900">
+                                {% if submission.script %}
+                                    {{ submission.script.title }}
+                                {% else %}
+                                    Custom Content
+                                {% endif %}
+                            </div>
+                            <div class="text-sm text-gray-500 max-w-xs truncate">{{ submission.text_content[:50] }}{% if submission.text_content|length > 50 %}...{% endif %}</div>
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                            {% if submission.audio_filename %}
+                                <i class="fas fa-microphone text-blue-600 mr-1"></i> Audio + Text
+                            {% else %}
+                                <i class="fas fa-file-text text-gray-600 mr-1"></i> Text Only
+                            {% endif %}
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ submission.word_count or 0 }}</td>
+                        <td class="px-6 py-4 whitespace-nowrap">
+                            <span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full
+                                {% if submission.status == 'approved' %}bg-green-100 text-green-800
+                                {% elif submission.status == 'rejected' %}bg-red-100 text-red-800
+                                {% else %}bg-yellow-100 text-yellow-800{% endif %}">
+                                {{ submission.status.title() }}
+                            </span>
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                            {{ submission.created_at.strftime('%b %d, %Y') }}
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                            <div class="flex items-center space-x-2">
+                                {% if submission.audio_filename %}
+                                <audio controls class="h-8">
+                                    <source src="{{ url_for('uploaded_file', filename=submission.audio_filename) }}" type="audio/mp4">
+                                </audio>
+                                {% endif %}
+                                
+                                {% if submission.status == 'pending' %}
+                                <form method="POST" action="{{ url_for('delete_submission', submission_id=submission.id) }}" class="inline" onsubmit="return confirm('Are you sure you want to delete this submission? This action cannot be undone.')">
+                                    <button type="submit" class="text-red-600 hover:text-red-900 text-sm" title="Delete submission">
+                                        <i class="fas fa-trash-alt"></i>
+                                    </button>
+                                </form>
+                                {% endif %}
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            {% else %}
+            <div class="p-6 text-center">
+                <div class="text-gray-400 mb-4">
+                    <i class="fas fa-file-text text-4xl"></i>
+                </div>
+                <h3 class="text-lg font-medium text-gray-900 mb-2">No submissions yet</h3>
+                <p class="text-gray-600">Start contributing by recording your first audio sample or submitting text content.</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,254 @@
+{% extends "base.html" %}
+
+{% block title %}Review Submission - VoiceScript Collector{% endblock %}
+
+{% block content %}
+<div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <!-- Header -->
+    <div class="bg-white rounded-lg shadow-sm p-6 mb-8">
+        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <div>
+                <div class="flex items-center gap-2 mb-2">
+                    <h1 class="text-2xl font-bold text-gray-900">Review Submission</h1>
+                    {% if submission.is_field_collection %}
+                    <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-800">
+                        <i class="fas fa-street-view mr-1"></i> Field Collection
+                    </span>
+                    {% endif %}
+                </div>
+                <p class="text-gray-600 mt-1">Compare the audio recording with the required script content</p>
+            </div>
+            <div class="text-sm text-gray-500">
+                {% if submission.is_field_collection %}
+                    <div class="bg-orange-50 rounded-lg p-3 border border-orange-200">
+                        <div class="font-medium text-orange-900 mb-1">
+                            <i class="fas fa-microphone mr-1"></i> Field-Collected Recording
+                        </div>
+                        {% if submission.speaker_name %}
+                        <div>Speaker: <span class="font-medium text-gray-700">{{ submission.speaker_name }}</span></div>
+                        {% endif %}
+                        {% if submission.speaker_location %}
+                        <div><i class="fas fa-map-marker-alt mr-1"></i> {{ submission.speaker_location }}</div>
+                        {% endif %}
+                        <div class="text-xs text-gray-600 mt-1">
+                            Collected by: {{ submission.collected_by_admin.first_name }} {{ submission.collected_by_admin.last_name }}
+                        </div>
+                    </div>
+                {% else %}
+                    <div>Submitted by: <span class="font-medium">{{ submission.user.first_name }} {{ submission.user.last_name }}</span></div>
+                {% endif %}
+                <div class="mt-1">Date: {{ submission.created_at.strftime('%B %d, %Y at %I:%M %p') }}</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+        <!-- Script Content -->
+        <div class="bg-white rounded-lg shadow-sm p-6">
+            <h2 class="text-lg font-semibold text-gray-900 mb-4">
+                <i class="fas fa-file-text text-blue-600 mr-2"></i>
+                Required Script
+            </h2>
+            
+            {% if submission.script %}
+            <div class="mb-4">
+                <h3 class="font-medium text-gray-900">{{ submission.script.title }}</h3>
+                <div class="text-sm text-gray-600">
+                    Category: {{ submission.script.category or 'General' }}
+                    {% if submission.script.language %}
+                    | Language: {{ submission.script.language.upper() }}
+                    {% endif %}
+                </div>
+            </div>
+            
+            <div class="bg-gray-50 rounded-lg p-4 mb-4">
+                <h4 class="font-medium text-gray-700 mb-2">Script to Read:</h4>
+                <div class="text-gray-900 leading-relaxed">{{ submission.script.content }}</div>
+            </div>
+            
+            <div class="text-sm text-gray-600">
+                <i class="fas fa-clock mr-1"></i>
+                Created: {{ submission.script.created_at.strftime('%B %d, %Y') }}
+            </div>
+            {% else %}
+            <div class="bg-yellow-50 rounded-lg p-4">
+                <h4 class="font-medium text-yellow-800 mb-2">Custom Content</h4>
+                <div class="text-yellow-700">This is a free-form submission without a specific script.</div>
+            </div>
+            {% endif %}
+            
+            {% if submission.text_content %}
+            <div class="mt-4">
+                <h4 class="font-medium text-gray-700 mb-2">User's Notes:</h4>
+                <div class="bg-blue-50 rounded-lg p-4 text-gray-900">{{ submission.text_content }}</div>
+            </div>
+            {% endif %}
+        </div>
+
+        <!-- Audio Recording -->
+        <div class="bg-white rounded-lg shadow-sm p-6">
+            <h2 class="text-lg font-semibold text-gray-900 mb-4">
+                <i class="fas fa-microphone text-green-600 mr-2"></i>
+                Audio Recording
+            </h2>
+            
+            {% if submission.audio_filename %}
+            <div class="space-y-4">
+                <div class="bg-gray-50 rounded-lg p-4">
+                    <audio controls class="w-full" id="submissionAudio">
+                        <source src="{{ url_for('uploaded_file', filename=submission.audio_filename) }}" type="audio/mp4">
+                        Your browser does not support the audio element.
+                    </audio>
+                </div>
+                
+                <div class="grid grid-cols-2 gap-4 text-sm">
+                    <div class="bg-blue-50 rounded-lg p-3">
+                        <div class="text-gray-600">Duration</div>
+                        <div class="font-medium text-gray-900" id="audioDuration">Loading...</div>
+                    </div>
+                    <div class="bg-green-50 rounded-lg p-3">
+                        <div class="text-gray-600">Word Count</div>
+                        <div class="font-medium text-gray-900">{{ submission.word_count or 'Not calculated' }}</div>
+                    </div>
+                </div>
+            </div>
+            {% else %}
+            <div class="bg-red-50 rounded-lg p-4">
+                <div class="text-red-800 font-medium">No Audio Recording</div>
+                <div class="text-red-600 text-sm">This submission does not include an audio file.</div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Review Form -->
+    <div class="bg-white rounded-lg shadow-sm p-6 mt-8">
+        <h2 class="text-lg font-semibold text-gray-900 mb-6">
+            <i class="fas fa-clipboard-check text-purple-600 mr-2"></i>
+            Review Decision
+        </h2>
+        
+        <form id="reviewForm" class="space-y-6">
+            <input type="hidden" name="submission_id" value="{{ submission.id }}">
+            
+            <!-- Quality Score -->
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-2">Quality Score (1-5)</label>
+                <div class="flex space-x-2">
+                    {% for i in range(1, 6) %}
+                    <button type="button" class="quality-star w-8 h-8 text-gray-300 hover:text-yellow-400 focus:outline-none" data-rating="{{ i }}">
+                        <i class="fas fa-star"></i>
+                    </button>
+                    {% endfor %}
+                </div>
+                <input type="hidden" name="quality_score" id="qualityScore" value="">
+            </div>
+            
+            <!-- Review Notes -->
+            <div>
+                <label for="review_notes" class="block text-sm font-medium text-gray-700 mb-2">Review Notes</label>
+                <textarea name="review_notes" id="review_notes" rows="4" 
+                         class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                         placeholder="Provide feedback about audio quality, pronunciation, background noise, etc."></textarea>
+            </div>
+            
+            <!-- Decision Buttons -->
+            <div class="flex space-x-4 pt-4">
+                <button type="button" onclick="submitReview('approved')" 
+                        class="flex-1 bg-green-600 text-white px-6 py-3 rounded-md hover:bg-green-700 font-medium">
+                    <i class="fas fa-check mr-2"></i>
+                    Approve Submission
+                </button>
+                <button type="button" onclick="submitReview('rejected')" 
+                        class="flex-1 bg-red-600 text-white px-6 py-3 rounded-md hover:bg-red-700 font-medium">
+                    <i class="fas fa-times mr-2"></i>
+                    Reject Submission
+                </button>
+                <button type="button" onclick="submitReview('pending')" 
+                        class="flex-1 bg-yellow-600 text-white px-6 py-3 rounded-md hover:bg-yellow-700 font-medium">
+                    <i class="fas fa-edit mr-2"></i>
+                    Request Changes
+                </button>
+            </div>
+        </form>
+        
+        <div class="mt-6 pt-4 border-t border-gray-200">
+            <a href="{{ url_for('reviewer_dashboard') }}" 
+               class="inline-flex items-center text-gray-600 hover:text-gray-900">
+                <i class="fas fa-arrow-left mr-2"></i>
+                Back to Dashboard
+            </a>
+        </div>
+    </div>
+</div>
+
+<script>
+// Handle audio duration display
+document.addEventListener('DOMContentLoaded', function() {
+    const audio = document.getElementById('submissionAudio');
+    if (audio) {
+        audio.addEventListener('loadedmetadata', function() {
+            const duration = Math.round(audio.duration * 10) / 10;
+            document.getElementById('audioDuration').textContent = duration + ' seconds';
+        });
+    }
+});
+
+// Handle star rating
+document.querySelectorAll('.quality-star').forEach(star => {
+    star.addEventListener('click', function() {
+        const rating = parseInt(this.dataset.rating);
+        document.getElementById('qualityScore').value = rating;
+        
+        // Update star display
+        document.querySelectorAll('.quality-star').forEach((s, index) => {
+            if (index < rating) {
+                s.classList.remove('text-gray-300');
+                s.classList.add('text-yellow-400');
+            } else {
+                s.classList.remove('text-yellow-400');
+                s.classList.add('text-gray-300');
+            }
+        });
+    });
+});
+
+// Submit review
+function submitReview(action) {
+    const qualityScore = document.getElementById('qualityScore').value;
+    const reviewNotes = document.getElementById('review_notes').value;
+    
+    if (!qualityScore) {
+        alert('Please select a quality score before submitting your review.');
+        return;
+    }
+    
+    const data = {
+        action: action,
+        quality_score: parseInt(qualityScore),
+        notes: reviewNotes
+    };
+    
+    fetch(`/api/submissions/{{ submission.id }}/review`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(data)
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            alert('Review submitted successfully!');
+            window.location.href = '{{ url_for("reviewer_dashboard") }}';
+        } else {
+            alert('Error submitting review: ' + data.message);
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('Error submitting review. Please try again.');
+    });
+}
+</script>
+{% endblock %}

@@ -1,0 +1,57 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database Service
+  postgres:
+    image: postgres:15-alpine
+    container_name: voicescript_postgres
+    environment:
+      POSTGRES_DB: voicescript_db
+      POSTGRES_USER: voicescript_user
+      POSTGRES_PASSWORD: voicescript_password
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - voicescript_network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U voicescript_user -d voicescript_db"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Flask Application Service
+  web:
+    build: .
+    container_name: voicescript_app
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=postgresql://voicescript_user:voicescript_password@postgres:5432/voicescript_db
+      - FLASK_ENV=production
+      - SECRET_KEY=production-secret-key-change-this-in-production
+      - USE_HTTPS=false
+      - ENABLE_WEBVIEW_FALLBACK=false
+    volumes:
+      - ./uploads:/app/uploads
+      - ./logs:/app/logs
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - voicescript_network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+networks:
+  voicescript_network:
+    driver: bridge
+
+volumes:
+  postgres_data:
+    driver: local

@@ -1,0 +1,1019 @@
+import os
+from flask import Flask, render_template, request, redirect, url_for, flash, session, jsonify, send_from_directory
+from flask_sqlalchemy import SQLAlchemy
+from werkzeug.security import generate_password_hash, check_password_hash
+from werkzeug.utils import secure_filename
+from authlib.integrations.flask_client import OAuth
+import uuid
+from datetime import datetime
+import secrets
+import functools
+
+app = Flask(__name__)
+app.config['SECRET_KEY'] = 'demo-secret-key-for-development'
+app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///voicescript.db'
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+app.config['UPLOAD_FOLDER'] = 'uploads'
+
+# Google OAuth Configuration
+app.config['GOOGLE_CLIENT_ID'] = os.environ.get('GOOGLE_CLIENT_ID')
+app.config['GOOGLE_CLIENT_SECRET'] = os.environ.get('GOOGLE_CLIENT_SECRET')
+
+# Ensure upload directory exists
+os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
+
+db = SQLAlchemy(app)
+oauth = OAuth(app)
+
+# Configure Google OAuth
+google = oauth.register(
+    name='google',
+    client_id=app.config['GOOGLE_CLIENT_ID'],
+    client_secret=app.config['GOOGLE_CLIENT_SECRET'],
+    server_metadata_url='https://accounts.google.com/.well-known/openid_configuration',
+    client_kwargs={
+        'scope': 'openid email profile'
+    }
+)
+
+# Database Models
+class User(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    email = db.Column(db.String(120), unique=True, nullable=False)
+    password_hash = db.Column(db.String(128), nullable=True)  # Made nullable for OAuth users
+    first_name = db.Column(db.String(50), nullable=False)
+    last_name = db.Column(db.String(50), nullable=False)
+    role = db.Column(db.String(20), default='provider')
+    google_id = db.Column(db.String(100), unique=True, nullable=True)  # Google OAuth ID
+    profile_picture = db.Column(db.String(255), nullable=True)  # Profile picture URL
+    auth_provider = db.Column(db.String(20), default='local')  # 'local' or 'google'
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    def set_password(self, password):
+        self.password_hash = generate_password_hash(password)
+
+    def check_password(self, password):
+        if not self.password_hash:
+            return False
+        return check_password_hash(self.password_hash, password)
+
+class Script(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    title = db.Column(db.String(200), nullable=False)
+    content = db.Column(db.Text, nullable=False)
+    language = db.Column(db.String(10), default='en')
+    category = db.Column(db.String(50))
+    is_active = db.Column(db.Boolean, default=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+class Submission(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    script_id = db.Column(db.Integer, db.ForeignKey('script.id'), nullable=False)  # Required for script-based recordings
+    text_content = db.Column(db.Text)  # Optional text response
+    audio_filename = db.Column(db.String(255), nullable=False)  # Audio required for script recordings
+    status = db.Column(db.String(20), default='pending')
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    reviewed_at = db.Column(db.DateTime)
+    reviewed_by = db.Column(db.Integer, db.ForeignKey('user.id'))
+    review_notes = db.Column(db.Text)
+    quality_score = db.Column(db.Integer)
+    word_count = db.Column(db.Integer, default=0)
+    duration = db.Column(db.Float, default=0.0)  # Changed from duration_seconds for consistency
+
+    user = db.relationship('User', foreign_keys=[user_id])
+    script = db.relationship('Script')
+    reviewer = db.relationship('User', foreign_keys=[reviewed_by])
+
+class BillingRecord(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    submission_id = db.Column(db.Integer, db.ForeignKey('submission.id'), nullable=True)
+    amount = db.Column(db.Float, nullable=False)
+    rate_per_word = db.Column(db.Float)  # For provider payments
+    rate_per_submission = db.Column(db.Float)  # For reviewer payments
+    billing_type = db.Column(db.String(20), nullable=False)  # 'provider' or 'reviewer'
+    language_code = db.Column(db.String(10), nullable=False)
+    word_count = db.Column(db.Integer, default=0)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    user = db.relationship('User')
+    submission = db.relationship('Submission')
+
+class Language(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    code = db.Column(db.String(10), unique=True, nullable=False)
+    name = db.Column(db.String(100), nullable=False)
+    native_name = db.Column(db.String(100))
+    is_active = db.Column(db.Boolean, default=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+class PricingRate(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    language_code = db.Column(db.String(10), db.ForeignKey('language.code'), nullable=False)
+    provider_rate_per_word = db.Column(db.Float, default=0.01)  # Rate paid to providers
+    reviewer_rate_per_submission = db.Column(db.Float, default=2.00)  # Fixed rate per review
+    currency = db.Column(db.String(10), default='USD')  # Currency code (USD, EUR, BDT, etc.)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    language = db.relationship('Language')
+
+def require_auth(f):
+    @functools.wraps(f)
+    def decorated_function(*args, **kwargs):
+        if 'user_id' not in session:
+            flash('Please log in to access this page.', 'error')
+            return redirect(url_for('login'))
+        return f(*args, **kwargs)
+    return decorated_function
+
+def require_role(required_roles):
+    def decorator(f):
+        @functools.wraps(f)
+        def decorated_function(*args, **kwargs):
+            if 'user_role' not in session or session['user_role'] not in required_roles:
+                flash('Access denied. Insufficient privileges.', 'error')
+                return redirect(url_for('index'))
+            return f(*args, **kwargs)
+        return decorated_function
+    return decorator
+
+# Routes
+@app.route('/')
+def index():
+    if 'user_id' not in session:
+        return render_template('landing.html')
+
+    user_role = session['user_role']
+    if user_role == 'admin':
+        return redirect(url_for('admin_dashboard'))
+    elif user_role == 'reviewer':
+        return redirect(url_for('reviewer_dashboard'))
+    else:
+        return redirect(url_for('provider_dashboard'))
+
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    # Handle demo login via URL parameter
+    demo_role = request.args.get('demo')
+    if demo_role in ['provider', 'reviewer', 'admin']:
+        email = f"{demo_role}@demo.com"
+        user = User.query.filter_by(email=email).first()
+        if user:
+            # Store user info in the session
+            session['user_id'] = user.id
+            session['user_role'] = user.role
+            session['user_name'] = f"{user.first_name} {user.last_name}"
+            flash('Login successful!', 'success')
+
+            # Direct redirect to dashboard
+            if user.role == 'admin':
+                return redirect(url_for('admin_dashboard'))
+            elif user.role == 'reviewer':
+                return redirect(url_for('reviewer_dashboard'))
+            else:
+                return redirect(url_for('provider_dashboard'))
+
+    if request.method == 'POST':
+        email = request.form['email']
+        password = request.form['password']
+
+        user = User.query.filter_by(email=email).first()
+        if user and user.check_password(password):
+            # Store user info in the session
+            session['user_id'] = user.id
+            session['user_role'] = user.role
+            session['user_name'] = f"{user.first_name} {user.last_name}"
+            flash('Login successful!', 'success')
+
+            # Direct redirect to dashboard
+            if user.role == 'admin':
+                return redirect(url_for('admin_dashboard'))
+            elif user.role == 'reviewer':
+                return redirect(url_for('reviewer_dashboard'))
+            else:
+                return redirect(url_for('provider_dashboard'))
+        else:
+            flash('Invalid email or password', 'error')
+
+    return render_template('login.html')
+
+# Google OAuth routes
+@app.route('/login/google')
+def google_login():
+    """Initiate Google OAuth login"""
+    if not app.config['GOOGLE_CLIENT_ID']:
+        flash('Google authentication is not configured. Please use email/password login.', 'error')
+        return redirect(url_for('login'))
+
+    redirect_uri = url_for('google_callback', _external=True)
+    return google.authorize_redirect(redirect_uri)
+
+@app.route('/callback/google')
+def google_callback():
+    """Handle Google OAuth callback"""
+    if not app.config['GOOGLE_CLIENT_ID']:
+        flash('Google authentication is not configured.', 'error')
+        return redirect(url_for('login'))
+
+    try:
+        token = google.authorize_access_token()
+        user_info = token.get('userinfo')
+
+        if user_info:
+            # Check if user exists
+            user = User.query.filter_by(google_id=user_info['sub']).first()
+
+            if not user:
+                # Check if user with same email exists (local account)
+                existing_user = User.query.filter_by(email=user_info['email']).first()
+                if existing_user:
+                    # Link Google account to existing local account
+                    existing_user.google_id = user_info['sub']
+                    existing_user.profile_picture = user_info.get('picture')
+                    existing_user.auth_provider = 'google'
+                    db.session.commit()
+                    user = existing_user
+                else:
+                    # Create new user
+                    user = User(
+                        email=user_info['email'],
+                        first_name=user_info.get('given_name', ''),
+                        last_name=user_info.get('family_name', ''),
+                        google_id=user_info['sub'],
+                        profile_picture=user_info.get('picture'),
+                        auth_provider='google',
+                        role='provider'  # Default role for new Google users
+                    )
+                    db.session.add(user)
+                    db.session.commit()
+
+            # Store user info in the session
+            session['user_id'] = user.id
+            session['user_role'] = user.role
+            session['user_name'] = f"{user.first_name} {user.last_name}"
+            flash('Google login successful!', 'success')
+
+            # Redirect to appropriate dashboard
+            if user.role == 'admin':
+                return redirect(url_for('admin_dashboard'))
+            elif user.role == 'reviewer':
+                return redirect(url_for('reviewer_dashboard'))
+            else:
+                return redirect(url_for('provider_dashboard'))
+
+    except Exception as e:
+        flash(f'Google authentication failed: {str(e)}', 'error')
+        return redirect(url_for('login'))
+
+@app.route('/logout')
+def logout():
+    session.clear()
+    flash('You have been logged out successfully.', 'success')
+    return redirect(url_for('index'))
+
+@app.route('/dashboard/provider')
+@require_auth
+def provider_dashboard():
+    user = User.query.get(session['user_id'])
+    submissions = Submission.query.filter_by(user_id=user.id).order_by(Submission.created_at.desc()).limit(10).all()
+    scripts = Script.query.filter_by(is_active=True).all()
+
+    # Calculate user stats
+    total_submissions = Submission.query.filter_by(user_id=user.id).count()
+    approved_submissions = Submission.query.filter_by(user_id=user.id, status='approved').count()
+    pending_submissions = Submission.query.filter_by(user_id=user.id, status='pending').count()
+
+    # Calculate earnings
+    earnings = db.session.query(db.func.sum(BillingRecord.amount)).filter_by(user_id=user.id).scalar() or 0
+
+    stats = {
+        'total_submissions': total_submissions,
+        'approved': approved_submissions,
+        'pending': pending_submissions,
+        'rejected': total_submissions - approved_submissions - pending_submissions,
+        'earnings': round(earnings, 2)
+    }
+
+    return render_template('dashboard_provider.html', user=user, submissions=submissions, scripts=scripts, stats=stats)
+
+@app.route('/dashboard/reviewer')
+@require_role(['reviewer', 'admin'])
+def reviewer_dashboard():
+    pending_submissions = Submission.query.filter_by(status='pending').order_by(Submission.created_at.desc()).all()
+    recent_reviews = Submission.query.filter(
+        Submission.reviewed_by == session['user_id']
+    ).order_by(Submission.reviewed_at.desc()).limit(10).all()
+
+    return render_template('dashboard_reviewer.html',
+                           pending_submissions=pending_submissions,
+                           recent_reviews=recent_reviews)
+
+@app.route('/dashboard/admin')
+@require_role(['admin'])
+def admin_dashboard():
+    # Calculate platform stats
+    stats = {
+        'total_users': User.query.count(),
+        'total_submissions': Submission.query.count(),
+        'pending_submissions': Submission.query.filter_by(status='pending').count(),
+        'approved_submissions': Submission.query.filter_by(status='approved').count(),
+        'total_scripts': Script.query.count(),
+        'active_scripts': Script.query.filter_by(is_active=True).count()
+    }
+
+    recent_activity = Submission.query.order_by(Submission.created_at.desc()).limit(10).all()
+
+    return render_template('dashboard_admin.html', stats=stats, recent_activity=recent_activity)
+
+# Additional routes for complete functionality
+@app.route('/record')
+@require_auth
+def record_list():
+    scripts = Script.query.filter_by(is_active=True).order_by(Script.created_at.desc()).all()
+    return render_template('record.html', scripts=scripts)
+
+@app.route('/record/script/<int:script_id>')
+@require_auth
+def record_script(script_id):
+    # Handle script ID 0 as custom content creation
+    if script_id == 0:
+        script = None  # No script selected, custom content
+    else:
+        script = Script.query.get_or_404(script_id)
+
+    scripts = Script.query.filter_by(is_active=True).order_by(Script.created_at.desc()).all()
+    return render_template('record.html', script=script, scripts=scripts)
+
+# API endpoint to get scripts data
+@app.route('/api/scripts', methods=['GET'])
+@require_auth
+def get_scripts():
+    scripts = Script.query.filter_by(is_active=True).order_by(Script.created_at.desc()).all()
+    return jsonify([{
+        'id': script.id,
+        'title': script.title,
+        'content': script.content,
+        'language': script.language,
+        'category': script.category
+    } for script in scripts])
+
+# Removed custom content route - only script-based recordings allowed
+
+@app.route('/submissions')
+@require_auth
+def submissions():
+    user_submissions = Submission.query.filter_by(user_id=session['user_id']).order_by(Submission.created_at.desc()).all()
+    return render_template('submissions.html', submissions=user_submissions)
+
+@app.route('/reviews')
+@require_role(['reviewer', 'admin'])
+def reviews():
+    pending_submissions = Submission.query.filter_by(status='pending').order_by(Submission.created_at.asc()).all()
+    return render_template('reviews.html', submissions=pending_submissions)
+
+@app.route('/admin/languages')
+@require_role(['admin'])
+def admin_languages():
+    """Admin language and pricing management (merged interface)"""
+    languages = Language.query.order_by(Language.created_at.desc()).all()
+
+    # Get pricing data for all languages
+    pricing_records = PricingRate.query.all()
+    pricing_dict = {pricing.language_code: pricing for pricing in pricing_records}
+
+    return render_template('admin_languages_pricing.html',
+                           languages=languages,
+                           pricing_dict=pricing_dict)
+
+@app.route('/admin/scripts')
+@require_role(['admin'])
+def admin_scripts():
+    scripts = Script.query.order_by(Script.created_at.desc()).all()
+    languages = Language.query.all()
+    return render_template('admin_scripts.html', scripts=scripts, languages=languages)
+
+# Recording and submission routes
+@app.route('/submit_recording', methods=['POST'])
+@require_auth
+def submit_recording():
+    script_id = request.form.get('script_id')
+    text_content = request.form.get('text_content', '').strip()
+    audio_file = request.files.get('audio_file')
+
+    # Validate required fields - for script-based recordings, audio is mandatory
+    if not script_id:
+        flash('Script selection is required.', 'error')
+        return redirect(request.referrer or url_for('record_list'))
+
+    if not audio_file or not audio_file.filename:
+        flash('Audio recording is required for script submissions.', 'error')
+        return redirect(request.referrer or url_for('record_list'))
+
+    # Handle audio file if uploaded
+    audio_filename = None
+    duration = None
+    if audio_file and audio_file.filename:
+        filename = secure_filename(audio_file.filename)
+        # Generate unique filename to prevent conflicts
+        audio_filename = f"{uuid.uuid4()}_{filename}"
+
+        # Ensure upload directory exists
+        os.makedirs(app.config.get('UPLOAD_FOLDER', 'uploads'), exist_ok=True)
+        audio_file.save(os.path.join(app.config.get('UPLOAD_FOLDER', 'uploads'), audio_filename))
+
+    # Calculate word count - use script content if no text_content provided
+    word_count = 0
+    if text_content:
+        word_count = len(text_content.split())
+    elif script_id:
+        # If recording from a script but no text provided, use script word count
+        script = Script.query.get(int(script_id))
+        if script and script.content:
+            word_count = len(script.content.split())
+
+    # Create new submission
+    submission = Submission(
+        user_id=session['user_id'],
+        script_id=int(script_id) if script_id and script_id != '0' else None,
+        text_content=text_content,
+        audio_filename=audio_filename,
+        duration=duration,
+        word_count=word_count,
+        status='pending'
+    )
+
+    db.session.add(submission)
+    db.session.commit()
+
+    flash('Recording submitted successfully!', 'success')
+    return redirect(url_for('provider_dashboard'))
+
+# File serving route for audio files
+@app.route('/uploads/<filename>')
+@require_auth
+def uploaded_file(filename):
+    """Serve uploaded audio files"""
+    return send_from_directory(app.config['UPLOAD_FOLDER'], filename)
+
+# Delete submission route for providers
+@app.route('/delete_submission/<int:submission_id>', methods=['POST'])
+@require_auth
+def delete_submission(submission_id):
+    """Allow providers to delete their own submissions before review"""
+    submission = Submission.query.get_or_404(submission_id)
+
+    # Check if user owns this submission
+    if submission.user_id != session['user_id']:
+        flash('You can only delete your own submissions.', 'error')
+        return redirect(url_for('provider_dashboard'))
+
+    # Check if submission is still pending (not reviewed)
+    if submission.status != 'pending':
+        flash('You can only delete submissions that haven\'t been reviewed yet.', 'error')
+        return redirect(url_for('provider_dashboard'))
+
+    # Delete audio file if it exists
+    if submission.audio_filename:
+        audio_path = os.path.join(app.config['UPLOAD_FOLDER'], submission.audio_filename)
+        if os.path.exists(audio_path):
+            os.remove(audio_path)
+
+    # Delete submission from database
+    db.session.delete(submission)
+    db.session.commit()
+
+    flash('Submission deleted successfully.', 'success')
+    return redirect(url_for('provider_dashboard'))
+
+# Review submission page for reviewers
+@app.route('/review/submission/<int:submission_id>')
+@require_role(['reviewer', 'admin'])
+def review_submission(submission_id):
+    """Display submission review interface"""
+    submission = Submission.query.get_or_404(submission_id)
+    return render_template('review_submission.html', submission=submission)
+
+# API endpoint for processing review decisions
+@app.route('/api/submissions/<int:submission_id>/review', methods=['POST'])
+@require_role(['reviewer', 'admin'])
+def process_review(submission_id):
+    """Handle submission review by reviewers"""
+    submission = Submission.query.get_or_404(submission_id)
+
+    if request.method == 'GET':
+        # Return submission details for review modal
+        return jsonify({
+            'id': submission.id,
+            'script_title': submission.script.title if submission.script else 'Custom Content',
+            'script_content': submission.script.content if submission.script else '',
+            'text_content': submission.text_content or '',
+            'audio_filename': submission.audio_filename,
+            'word_count': submission.word_count,
+            'duration': submission.duration,
+            'created_at': submission.created_at.strftime('%Y-%m-%d %H:%M:%S'),
+            'user_name': f"{submission.user.first_name} {submission.user.last_name}"
+        })
+
+    elif request.method == 'POST':
+        # Process review decision
+        data = request.json
+        action = data.get('action')  # 'approve', 'reject', or 'request_changes'
+        review_notes = data.get('notes', '')
+        quality_score = data.get('quality_score', 0)
+
+        # Update submission
+        submission.status = action if action in ['approved', 'rejected'] else 'pending'
+        submission.reviewed_by = session['user_id']
+        submission.reviewed_at = datetime.utcnow()
+        submission.review_notes = review_notes
+        submission.quality_score = quality_score
+
+        # Create billing records for approved submissions
+        if action == 'approved':
+            # Get language-specific pricing
+            script_language = submission.script.language if submission.script else 'en'
+            pricing = PricingRate.query.filter_by(language_code=script_language).first()
+
+            if not pricing:
+                # Create default pricing if none exists
+                pricing = PricingRate(
+                    language_code=script_language,
+                    provider_rate_per_word=0.01,
+                    reviewer_rate_per_submission=2.00
+                )
+                db.session.add(pricing)
+                db.session.flush()  # Get the ID
+
+            # Provider payment (per word) - recalculate word count if needed
+            provider_word_count = submission.word_count
+            if provider_word_count == 0 and submission.script:
+                # Use script word count if submission word count is 0
+                provider_word_count = len(submission.script.content.split())
+
+            if provider_word_count > 0:
+                provider_amount = provider_word_count * pricing.provider_rate_per_word
+                provider_billing = BillingRecord(
+                    user_id=submission.user_id,
+                    submission_id=submission.id,
+                    amount=provider_amount,
+                    rate_per_word=pricing.provider_rate_per_word,
+                    billing_type='provider',
+                    language_code=script_language,
+                    word_count=provider_word_count
+                )
+                db.session.add(provider_billing)
+
+            # Reviewer payment (per submission)
+            reviewer_billing = BillingRecord(
+                user_id=session['user_id'],  # Current reviewer
+                submission_id=submission.id,
+                amount=pricing.reviewer_rate_per_submission,
+                rate_per_submission=pricing.reviewer_rate_per_submission,
+                billing_type='reviewer',
+                language_code=script_language
+            )
+            db.session.add(reviewer_billing)
+
+        db.session.commit()
+
+        return jsonify({
+            'success': True,
+            'message': f'Submission {action} successfully'
+        })
+
+# Pricing management routes
+@app.route('/admin/pricing')
+@require_role(['admin'])
+def admin_pricing():
+    """Admin interface for managing pricing rates"""
+    languages = Language.query.filter_by(is_active=True).all()
+    pricing_rates = PricingRate.query.all()
+
+    # Create dict for easy lookup
+    pricing_dict = {rate.language_code: rate for rate in pricing_rates}
+
+    return render_template('admin_pricing.html',
+                           languages=languages,
+                           pricing_dict=pricing_dict)
+
+@app.route('/api/pricing/update', methods=['POST'])
+@require_role(['admin'])
+def update_pricing():
+    """Update pricing rates for languages"""
+    data = request.json
+    language_code = data.get('language_code')
+    provider_rate = float(data.get('provider_rate', 0.01))
+    reviewer_rate = float(data.get('reviewer_rate', 2.00))
+    currency = data.get('currency', 'USD')
+
+    # Find or create pricing record
+    pricing = PricingRate.query.filter_by(language_code=language_code).first()
+    if pricing:
+        pricing.provider_rate_per_word = provider_rate
+        pricing.reviewer_rate_per_submission = reviewer_rate
+        pricing.currency = currency
+        pricing.updated_at = datetime.utcnow()
+    else:
+        pricing = PricingRate(
+            language_code=language_code,
+            provider_rate_per_word=provider_rate,
+            reviewer_rate_per_submission=reviewer_rate,
+            currency=currency
+        )
+        db.session.add(pricing)
+
+    db.session.commit()
+    return jsonify({'success': True})
+
+# Earnings dashboard routes
+@app.route('/earnings')
+@require_auth
+def earnings_dashboard():
+    """User earnings dashboard"""
+    user_id = session['user_id']
+    user = User.query.get(user_id)
+
+    # Get user's billing records (handle potential schema migration)
+    try:
+        provider_earnings = BillingRecord.query.filter_by(
+            user_id=user_id,
+            billing_type='provider'
+        ).order_by(BillingRecord.created_at.desc()).all()
+
+        reviewer_earnings = BillingRecord.query.filter_by(
+            user_id=user_id,
+            billing_type='reviewer'
+        ).order_by(BillingRecord.created_at.desc()).all()
+    except Exception as e:
+        # Handle old schema - show empty for now
+        provider_earnings = []
+        reviewer_earnings = []
+
+    # Calculate totals
+    total_provider = sum(record.amount for record in provider_earnings)
+    total_reviewer = sum(record.amount for record in reviewer_earnings)
+
+    # Role-specific total earnings
+    if user.role == 'provider':
+        total_earnings = total_provider
+    elif user.role == 'reviewer':
+        total_earnings = total_reviewer
+    else:  # admin
+        total_earnings = total_provider + total_reviewer
+
+    return render_template('earnings.html',
+                           user=user,
+                           provider_earnings=provider_earnings,
+                           reviewer_earnings=reviewer_earnings,
+                           total_provider=total_provider,
+                           total_reviewer=total_reviewer,
+                           total_earnings=total_earnings,
+                           user_role=user.role)
+
+# API routes for admin panel
+@app.route('/api/scripts', methods=['POST'])
+@require_role(['admin'])
+def create_script():
+    data = request.json
+    script = Script(
+        title=data['title'],
+        content=data['content'],
+        category=data.get('category', ''),
+        language=data.get('language', 'en')
+    )
+    db.session.add(script)
+    db.session.commit()
+    return jsonify({'success': True, 'id': script.id})
+
+@app.route('/api/scripts/<int:script_id>', methods=['GET'])
+@require_role(['admin'])
+def get_script(script_id):
+    script = Script.query.get_or_404(script_id)
+    languages = Language.query.all()
+    return jsonify({
+        'success': True,
+        'script': {
+            'id': script.id,
+            'title': script.title,
+            'content': script.content,
+            'category': script.category,
+            'language': script.language,
+            'is_active': script.is_active
+        },
+        'languages': [{'code': lang.code, 'name': lang.name} for lang in languages]
+    })
+
+@app.route('/api/scripts/<int:script_id>', methods=['PUT'])
+@require_role(['admin'])
+def update_script(script_id):
+    script = Script.query.get_or_404(script_id)
+    data = request.json
+
+    script.title = data.get('title', script.title)
+    script.content = data.get('content', script.content)
+    script.category = data.get('category', script.category)
+    script.language = data.get('language', script.language)
+    script.is_active = data.get('is_active', script.is_active)
+
+    db.session.commit()
+    return jsonify({'success': True})
+
+
+
+# User management routes
+@app.route('/admin/users')
+@require_role(['admin'])
+def admin_users():
+    users = User.query.order_by(User.created_at.desc()).all()
+    return render_template('admin_users.html', users=users)
+
+@app.route('/admin/roles')
+@require_role(['admin'])
+def admin_roles():
+    users = User.query.order_by(User.created_at.desc()).all()
+    role_stats = {
+        'admin': User.query.filter_by(role='admin').count(),
+        'reviewer': User.query.filter_by(role='reviewer').count(),
+        'provider': User.query.filter_by(role='provider').count()
+    }
+    return render_template('admin_roles.html', users=users, role_stats=role_stats)
+
+@app.route('/api/users/<int:user_id>/role', methods=['PUT'])
+@require_role(['admin'])
+def update_user_role(user_id):
+    user = User.query.get_or_404(user_id)
+    data = request.json
+
+    new_role = data.get('role')
+    if new_role not in ['provider', 'reviewer', 'admin']:
+        return jsonify({'success': False, 'error': 'Invalid role'}), 400
+
+    user.role = new_role
+    db.session.commit()
+    return jsonify({'success': True})
+
+@app.route('/api/users', methods=['POST'])
+@require_role(['admin'])
+def create_user():
+    data = request.json
+
+    # Check if user already exists
+    if User.query.filter_by(email=data['email']).first():
+        return jsonify({'success': False, 'error': 'User already exists'}), 400
+
+    user = User(
+        email=data['email'],
+        first_name=data['first_name'],
+        last_name=data['last_name'],
+        role=data.get('role', 'provider')
+    )
+    user.set_password(data['password'])
+    db.session.add(user)
+    db.session.commit()
+    return jsonify({'success': True, 'id': user.id})
+
+@app.route('/api/users/<int:user_id>', methods=['PUT'])
+@require_role(['admin'])
+def update_user(user_id):
+    user = User.query.get_or_404(user_id)
+    data = request.json
+
+    user.first_name = data.get('first_name', user.first_name)
+    user.last_name = data.get('last_name', user.last_name)
+    user.email = data.get('email', user.email)
+
+    db.session.commit()
+    return jsonify({'success': True})
+
+@app.route('/api/users/<int:user_id>', methods=['DELETE'])
+@require_role(['admin'])
+def delete_user(user_id):
+    user = User.query.get_or_404(user_id)
+
+    # Prevent deleting the current user
+    if user.id == session.get('user_id'):
+        return jsonify({'success': False, 'error': 'Cannot delete your own account'}), 400
+
+    db.session.delete(user)
+    db.session.commit()
+    return jsonify({'success': True})
+
+# Language management API routes
+@app.route('/api/languages', methods=['POST'])
+@require_role(['admin'])
+def add_language():
+    data = request.json
+
+    # Check if language code already exists
+    if Language.query.filter_by(code=data['code']).first():
+        return jsonify({'success': False, 'error': 'Language code already exists'}), 400
+
+    language = Language(
+        code=data['code'].lower(),
+        name=data['name'],
+        native_name=data.get('native_name', ''),
+        is_active=True
+    )
+    db.session.add(language)
+
+    # Create pricing rates if provided
+    provider_rate = float(data.get('provider_rate', 0.010))
+    reviewer_rate = float(data.get('reviewer_rate', 2.00))
+
+    pricing = PricingRate(
+        language_code=data['code'].lower(),
+        provider_rate_per_word=provider_rate,
+        reviewer_rate_per_submission=reviewer_rate,
+        currency=data.get('currency', 'USD')
+    )
+    db.session.add(pricing)
+
+    db.session.commit()
+    return jsonify({'success': True, 'id': language.id})
+
+
+
+@app.route('/api/languages/<language_code>', methods=['PUT'])
+@require_role(['admin'])
+def update_language(language_code):
+    language = Language.query.filter_by(code=language_code).first()
+    if not language:
+        return jsonify({'success': False, 'error': 'Language not found'}), 404
+
+    data = request.json
+    language.name = data.get('name', language.name)
+    language.native_name = data.get('native_name', language.native_name)
+    language.is_active = data.get('is_active', language.is_active)
+
+    # Update or create pricing if rates provided
+    if 'provider_rate' in data or 'reviewer_rate' in data:
+        pricing = PricingRate.query.filter_by(language_code=language_code).first()
+        if pricing:
+            pricing.provider_rate_per_word = float(data.get('provider_rate', pricing.provider_rate_per_word))
+            pricing.reviewer_rate_per_submission = float(data.get('reviewer_rate', pricing.reviewer_rate_per_submission))
+            pricing.currency = data.get('currency', pricing.currency)
+            pricing.updated_at = datetime.utcnow()
+        else:
+            pricing = PricingRate(
+                language_code=language_code,
+                provider_rate_per_word=float(data.get('provider_rate', 0.01)),
+                reviewer_rate_per_submission=float(data.get('reviewer_rate', 2.00)),
+                currency=data.get('currency', 'USD')
+            )
+            db.session.add(pricing)
+
+    db.session.commit()
+    return jsonify({'success': True})
+
+@app.route('/api/languages/<language_code>', methods=['GET'])
+@require_role(['admin'])
+def get_language(language_code):
+    """Get language details"""
+    language = Language.query.filter_by(code=language_code).first()
+    if not language:
+        return jsonify({'success': False, 'error': 'Language not found'}), 404
+
+    return jsonify({
+        'code': language.code,
+        'name': language.name,
+        'native_name': language.native_name,
+        'is_active': language.is_active
+    })
+
+@app.route('/api/pricing/<language_code>', methods=['GET'])
+@require_role(['admin'])
+def get_pricing(language_code):
+    """Get pricing for a language"""
+    pricing = PricingRate.query.filter_by(language_code=language_code).first()
+    if not pricing:
+        return jsonify({
+            'provider_rate_per_word': 0.010,
+            'reviewer_rate_per_submission': 2.00,
+            'currency': 'USD'
+        })
+
+    return jsonify({
+        'provider_rate_per_word': pricing.provider_rate_per_word,
+        'reviewer_rate_per_submission': pricing.reviewer_rate_per_submission,
+        'currency': pricing.currency
+    })
+
+def create_demo_data():
+    """Create demo users and initial data"""
+    try:
+        # Create demo users if they don't exist
+        demo_users = [
+            {'email': 'provider@demo.com', 'password': 'demo123', 'first_name': 'Demo', 'last_name': 'Provider', 'role': 'provider'},
+            {'email': 'reviewer@demo.com', 'password': 'demo123', 'first_name': 'Demo', 'last_name': 'Reviewer', 'role': 'reviewer'},
+            {'email': 'admin@demo.com', 'password': 'demo123', 'first_name': 'Demo', 'last_name': 'Admin', 'role': 'admin'}
+        ]
+
+        for user_data in demo_users:
+            # Check if user exists by trying to query, but handle schema errors gracefully
+            try:
+                existing_user = User.query.filter_by(email=user_data['email']).first()
+            except Exception:
+                existing_user = None
+
+            if not existing_user:
+                user = User(
+                    email=user_data['email'],
+                    first_name=user_data['first_name'],
+                    last_name=user_data['last_name'],
+                    role=user_data['role'],
+                    auth_provider='local'  # Set default auth provider for demo users
+                )
+                user.set_password(user_data['password'])
+                db.session.add(user)
+
+        # Create demo scripts
+        demo_scripts = [
+            {'title': 'Introduction Script', 'content': 'Hello, my name is [Your Name] and I am from [Your Location]. I am excited to contribute to this voice data collection project.', 'category': 'introduction'},
+            {'title': 'Weather Description', 'content': 'Today is a beautiful sunny day with clear blue skies. The temperature is perfect for outdoor activities.', 'category': 'description'},
+            {'title': 'Story Reading', 'content': 'Once upon a time, in a land far away, there lived a wise old owl who helped all the forest animals solve their problems.', 'category': 'narrative'}
+        ]
+
+        for script_data in demo_scripts:
+            try:
+                existing_script = Script.query.filter_by(title=script_data['title']).first()
+            except Exception:
+                existing_script = None
+
+            if not existing_script:
+                script = Script(**script_data)
+                db.session.add(script)
+
+        # Create demo languages with pricing
+        demo_languages = [
+            {'name': 'English', 'code': 'en', 'native_name': 'English', 'provider_rate': 0.015, 'reviewer_rate': 2.50, 'currency': 'USD'},
+            {'name': 'Spanish', 'code': 'es', 'native_name': 'Español', 'provider_rate': 0.012, 'reviewer_rate': 2.25, 'currency': 'USD'},
+            {'name': 'French', 'code': 'fr', 'native_name': 'Français', 'provider_rate': 0.018, 'reviewer_rate': 2.75, 'currency': 'EUR'},
+            {'name': 'German', 'code': 'de', 'native_name': 'Deutsch', 'provider_rate': 0.020, 'reviewer_rate': 3.00, 'currency': 'EUR'},
+        ]
+
+        for lang_data in demo_languages:
+            try:
+                existing_language = Language.query.filter_by(code=lang_data['code']).first()
+            except Exception:
+                existing_language = None
+
+            if not existing_language:
+                # Create language
+                language = Language(
+                    name=lang_data['name'],
+                    code=lang_data['code'],
+                    native_name=lang_data['native_name'],
+                    is_active=True
+                )
+                db.session.add(language)
+
+                # Create corresponding pricing
+                pricing = PricingRate(
+                    language_code=lang_data['code'],
+                    provider_rate_per_word=lang_data['provider_rate'],
+                    reviewer_rate_per_submission=lang_data['reviewer_rate'],
+                    currency=lang_data['currency']
+                )
+                db.session.add(pricing)
+
+        db.session.commit()
+        print("✅ Database initialized with demo data")
+
+    except Exception as e:
+        print(f"Error creating demo data: {e}")
+        db.session.rollback()
+
+
+
+if __name__ == '__main__':
+    with app.app_context():
+        # Force fresh database creation with new schema
+        import os
+        db_path = 'voicescript.db'
+
+        # Ensure clean database creation
+        if os.path.exists(db_path):
+            os.remove(db_path)
+            print("🔄 Removed existing database for schema update")
+
+        print("🗄️  Creating fresh database with Google OAuth schema...")
+
+        # Force drop and recreate all tables
+        db.drop_all()
+        db.create_all()
+
+        create_demo_data()
+        print("✅ Database initialized with demo data and Google OAuth support")
+
+    # Check if running in production mode
+    import os
+    port = int(os.environ.get('PORT', 8000))  # Changed from 5000 to 8000 to avoid macOS AirPlay conflict
+    debug_mode = os.environ.get('FLASK_ENV') != 'production'
+
+    print(f"🚀 Starting VoiceScript Collector on port {port}")
+    print(f"📊 Dashboard: http://localhost:{port}")
+    print("👤 Demo Accounts: provider@demo.com, reviewer@demo.com, admin@demo.com (password: demo123)")
+
+    app.run(host='0.0.0.0', port=port, debug=debug_mode)

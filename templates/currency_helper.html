@@ -1,0 +1,21 @@
+<!-- Currency symbol helper function -->
+<script>
+function getCurrencySymbol(currency) {
+    const symbols = {
+        'USD': '$',
+        'EUR': '€',
+        'BDT': '৳',
+        'GBP': '£',
+        'JPY': '¥',
+        'INR': '₹',
+        'CAD': 'C$',
+        'AUD': 'A$'
+    };
+    return symbols[currency] || '$';
+}
+
+function formatCurrency(amount, currency) {
+    const symbol = getCurrencySymbol(currency);
+    return `${symbol}${parseFloat(amount).toFixed(currency === 'JPY' ? 0 : 2)}`;
+}
+</script>

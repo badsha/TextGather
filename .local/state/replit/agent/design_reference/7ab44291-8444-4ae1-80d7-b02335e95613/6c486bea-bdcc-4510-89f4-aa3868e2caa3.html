@@ -1,0 +1,798 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VoiceScript Collector - NLP Data Collection Platform</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        'inter': ['Inter', 'sans-serif'],
+                    },
+                    colors: {
+                        primary: '#1976D2',
+                        secondary: '#424242',
+                        accent: '#FF6B35',
+                        success: '#4CAF50',
+                        warning: '#FF9800',
+                        error: '#F44336',
+                        surface: '#FFFFFF',
+                        background: '#FAFAFA',
+                    }
+                }
+            }
+        };
+    </script>
+</head>
+<body class="font-inter bg-background min-h-screen">
+    <!-- @COMPONENT: Navigation [role-based navigation with user context] -->
+    <nav class="bg-surface shadow-sm border-b border-gray-200 sticky top-0 z-50">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between items-center h-16">
+                <div class="flex items-center space-x-4">
+                    <div class="flex items-center space-x-2">
+                        <i class="fas fa-microphone-alt text-primary text-xl"></i>
+                        <span class="text-xl font-semibold text-gray-900">VoiceScript Collector</span>
+                    </div>
+                    <div class="hidden md:flex space-x-1 ml-8">
+                        <button class="px-4 py-2 text-sm font-medium text-primary bg-blue-50 rounded-lg">
+                            <i class="fas fa-tachometer-alt mr-2"></i>Dashboard
+                        </button>
+                        <button class="px-4 py-2 text-sm font-medium text-gray-600 hover:text-gray-900 hover:bg-gray-50 rounded-lg">
+                            <i class="fas fa-microphone mr-2"></i>Record
+                        </button>
+                        <button class="px-4 py-2 text-sm font-medium text-gray-600 hover:text-gray-900 hover:bg-gray-50 rounded-lg">
+                            <i class="fas fa-file-alt mr-2"></i>Submissions
+                        </button>
+                        <button class="px-4 py-2 text-sm font-medium text-gray-600 hover:text-gray-900 hover:bg-gray-50 rounded-lg">
+                            <i class="fas fa-check-circle mr-2"></i>Reviews
+                        </button>
+                    </div>
+                </div>
+                <div class="flex items-center space-x-4">
+                    <div class="flex items-center space-x-2 text-sm text-gray-600">
+                        <span class="bg-success text-white px-2 py-1 rounded-full text-xs font-medium">Provider</span>
+                        <span data-bind="user.earnings">$248.50</span>
+                    </div>
+                    <div class="flex items-center space-x-2">
+                        <!-- Profile image with fallback -->
+                        <img src="https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?ixlib=rb-4.0.3&ixid=MnwxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8&auto=format&fit=crop&w=150&h=150" 
+                             alt="User profile" 
+                             class="w-8 h-8 rounded-full object-cover" 
+                             data-bind="user.profileImage">
+                        <span class="text-sm font-medium text-gray-700" data-bind="user.name">Sarah Chen</span>
+                        <i class="fas fa-chevron-down text-gray-400 text-xs"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </nav>
+    <!-- @END_COMPONENT: Navigation -->
+
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <!-- @COMPONENT: DashboardHeader [user stats and quick actions] -->
+        <div class="mb-8">
+            <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-6">
+                <div>
+                    <h1 class="text-2xl font-semibold text-gray-900">Welcome back, <span data-bind="user.firstName">Sarah</span></h1>
+                    <p class="text-gray-600 mt-1">Track your submissions and earnings</p>
+                </div>
+                <div class="flex space-x-3 mt-4 sm:mt-0">
+                    <button class="bg-primary text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors">
+                        <i class="fas fa-plus mr-2"></i>New Recording
+                    </button>
+                    <button class="bg-surface text-gray-700 px-4 py-2 rounded-lg border border-gray-300 hover:bg-gray-50 transition-colors">
+                        <i class="fas fa-download mr-2"></i>Export Data
+                    </button>
+                </div>
+            </div>
+
+            <!-- Stats Cards -->
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+                <div class="bg-surface p-6 rounded-xl shadow-sm border border-gray-200">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <p class="text-sm font-medium text-gray-600">Total Submissions</p>
+                            <p class="text-2xl font-semibold text-gray-900" data-bind="stats.totalSubmissions">142</p>
+                        </div>
+                        <div class="bg-blue-100 p-3 rounded-lg">
+                            <i class="fas fa-file-audio text-primary text-xl"></i>
+                        </div>
+                    </div>
+                    <div class="flex items-center mt-4 text-sm">
+                        <span class="text-success"><i class="fas fa-arrow-up mr-1"></i>12%</span>
+                        <span class="text-gray-600 ml-2">vs last month</span>
+                    </div>
+                </div>
+
+                <div class="bg-surface p-6 rounded-xl shadow-sm border border-gray-200">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <p class="text-sm font-medium text-gray-600">Approved</p>
+                            <p class="text-2xl font-semibold text-gray-900" data-bind="stats.approved">128</p>
+                        </div>
+                        <div class="bg-green-100 p-3 rounded-lg">
+                            <i class="fas fa-check-circle text-success text-xl"></i>
+                        </div>
+                    </div>
+                    <div class="flex items-center mt-4 text-sm">
+                        <span class="text-success"><i class="fas fa-arrow-up mr-1"></i>8%</span>
+                        <span class="text-gray-600 ml-2">approval rate: 90.1%</span>
+                    </div>
+                </div>
+
+                <div class="bg-surface p-6 rounded-xl shadow-sm border border-gray-200">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <p class="text-sm font-medium text-gray-600">Pending Review</p>
+                            <p class="text-2xl font-semibold text-gray-900" data-bind="stats.pending">8</p>
+                        </div>
+                        <div class="bg-orange-100 p-3 rounded-lg">
+                            <i class="fas fa-clock text-warning text-xl"></i>
+                        </div>
+                    </div>
+                    <div class="flex items-center mt-4 text-sm">
+                        <span class="text-gray-600">Avg review time: 4.2 mins</span>
+                    </div>
+                </div>
+
+                <div class="bg-surface p-6 rounded-xl shadow-sm border border-gray-200">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <p class="text-sm font-medium text-gray-600">This Month Earnings</p>
+                            <p class="text-2xl font-semibold text-gray-900" data-bind="stats.earnings">$248.50</p>
+                        </div>
+                        <div class="bg-green-100 p-3 rounded-lg">
+                            <i class="fas fa-dollar-sign text-success text-xl"></i>
+                        </div>
+                    </div>
+                    <div class="flex items-center mt-4 text-sm">
+                        <span class="text-success"><i class="fas fa-arrow-up mr-1"></i>15%</span>
+                        <span class="text-gray-600 ml-2">vs last month</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <!-- @END_COMPONENT: DashboardHeader -->
+
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+            <!-- @COMPONENT: AudioRecordingInterface [main recording functionality] -->
+            <div class="bg-surface rounded-xl shadow-sm border border-gray-200 p-6">
+                <div class="flex items-center justify-between mb-6">
+                    <h2 class="text-xl font-semibold text-gray-900">Audio Recording</h2>
+                    <span class="bg-blue-100 text-primary px-3 py-1 rounded-full text-sm font-medium">Script #247</span>
+                </div>
+
+                <!-- Script Content -->
+                <div class="bg-gray-50 p-4 rounded-lg mb-6">
+                    <p class="text-sm font-medium text-gray-600 mb-2">Read the following text clearly:</p>
+                    <p class="text-gray-900 leading-relaxed" data-mock="true">
+                        "The rapid development of artificial intelligence has transformed how we interact with technology. Machine learning algorithms now power everything from recommendation systems to autonomous vehicles, fundamentally changing our daily experiences."
+                    </p>
+                    <div class="flex items-center mt-3 text-sm text-gray-500">
+                        <i class="fas fa-info-circle mr-2"></i>
+                        <span>Estimated reading time: 15-20 seconds | Word count: 32</span>
+                    </div>
+                </div>
+
+                <!-- Recording Controls -->
+                <div class="space-y-4">
+                    <!-- Waveform Visualization -->
+                    <div class="bg-gray-100 h-24 rounded-lg flex items-center justify-center" data-implementation="Replace with real audio waveform visualization">
+                        <div class="flex items-center space-x-1">
+                            <!-- Mock waveform bars -->
+                            <div class="bg-primary h-8 w-1 rounded-full opacity-60"></div>
+                            <div class="bg-primary h-12 w-1 rounded-full opacity-80"></div>
+                            <div class="bg-primary h-6 w-1 rounded-full opacity-40"></div>
+                            <div class="bg-primary h-16 w-1 rounded-full"></div>
+                            <div class="bg-primary h-10 w-1 rounded-full opacity-70"></div>
+                            <div class="bg-primary h-14 w-1 rounded-full opacity-90"></div>
+                            <div class="bg-primary h-4 w-1 rounded-full opacity-30"></div>
+                            <div class="bg-primary h-18 w-1 rounded-full"></div>
+                            <div class="bg-primary h-8 w-1 rounded-full opacity-60"></div>
+                            <div class="bg-primary h-12 w-1 rounded-full opacity-80"></div>
+                            <span class="text-gray-500 ml-4">00:12 / 00:18</span>
+                        </div>
+                    </div>
+
+                    <!-- Recording Status -->
+                    <div class="flex items-center justify-between p-4 bg-red-50 rounded-lg border border-red-200" id="recordingStatus">
+                        <div class="flex items-center space-x-3">
+                            <div class="w-3 h-3 bg-error rounded-full animate-pulse"></div>
+                            <span class="text-sm font-medium text-error">Recording in progress...</span>
+                            <span class="text-sm text-gray-600" data-bind="recording.duration">00:12</span>
+                        </div>
+                        <button class="text-error hover:text-red-700" data-event="click:stopRecording">
+                            <i class="fas fa-stop"></i>
+                        </button>
+                    </div>
+
+                    <!-- Control Buttons -->
+                    <div class="flex items-center justify-center space-x-4">
+                        <button class="bg-error text-white p-4 rounded-full hover:bg-red-700 transition-colors shadow-lg" 
+                                data-event="click:startRecording" data-implementation="Implement Web Audio API recording">
+                            <i class="fas fa-microphone text-xl"></i>
+                        </button>
+                        <button class="bg-gray-200 text-gray-600 p-3 rounded-full hover:bg-gray-300 transition-colors" 
+                                data-event="click:playRecording">
+                            <i class="fas fa-play"></i>
+                        </button>
+                        <button class="bg-gray-200 text-gray-600 p-3 rounded-full hover:bg-gray-300 transition-colors" 
+                                data-event="click:resetRecording">
+                            <i class="fas fa-redo"></i>
+                        </button>
+                    </div>
+
+                    <!-- Submission Controls -->
+                    <div class="flex space-x-3 pt-4">
+                        <button class="flex-1 bg-primary text-white py-3 px-4 rounded-lg hover:bg-blue-700 transition-colors font-medium" 
+                                data-event="click:submitRecording">
+                            <i class="fas fa-upload mr-2"></i>Submit Recording
+                        </button>
+                        <button class="px-4 py-3 text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors">
+                            <i class="fas fa-save"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+            <!-- @END_COMPONENT: AudioRecordingInterface -->
+
+            <!-- @COMPONENT: RecentSubmissions [submission history and status] -->
+            <div class="bg-surface rounded-xl shadow-sm border border-gray-200 p-6">
+                <div class="flex items-center justify-between mb-6">
+                    <h2 class="text-xl font-semibold text-gray-900">Recent Submissions</h2>
+                    <button class="text-primary hover:text-blue-700 text-sm font-medium">View All</button>
+                </div>
+
+                <div class="space-y-4">
+                    <!-- @MAP: submissions.map(submission => ( -->
+                    <div class="flex items-center justify-between p-4 bg-gray-50 rounded-lg" data-mock="true">
+                        <div class="flex items-center space-x-4">
+                            <div class="bg-success p-2 rounded-lg">
+                                <i class="fas fa-microphone text-white text-sm"></i>
+                            </div>
+                            <div>
+                                <p class="font-medium text-gray-900">Script #246 - AI Technology</p>
+                                <p class="text-sm text-gray-600">Submitted 2 hours ago • 18 seconds</p>
+                            </div>
+                        </div>
+                        <div class="flex items-center space-x-3">
+                            <span class="bg-success text-white px-3 py-1 rounded-full text-xs font-medium">Approved</span>
+                            <span class="text-success font-medium">+$4.20</span>
+                        </div>
+                    </div>
+
+                    <div class="flex items-center justify-between p-4 bg-gray-50 rounded-lg" data-mock="true">
+                        <div class="flex items-center space-x-4">
+                            <div class="bg-warning p-2 rounded-lg">
+                                <i class="fas fa-microphone text-white text-sm"></i>
+                            </div>
+                            <div>
+                                <p class="font-medium text-gray-900">Script #245 - Healthcare Terms</p>
+                                <p class="text-sm text-gray-600">Submitted 5 hours ago • 22 seconds</p>
+                            </div>
+                        </div>
+                        <div class="flex items-center space-x-3">
+                            <span class="bg-warning text-white px-3 py-1 rounded-full text-xs font-medium">Under Review</span>
+                            <span class="text-gray-400">Pending</span>
+                        </div>
+                    </div>
+
+                    <div class="flex items-center justify-between p-4 bg-gray-50 rounded-lg" data-mock="true">
+                        <div class="flex items-center space-x-4">
+                            <div class="bg-error p-2 rounded-lg">
+                                <i class="fas fa-file-alt text-white text-sm"></i>
+                            </div>
+                            <div>
+                                <p class="font-medium text-gray-900">Custom Text - Marketing Copy</p>
+                                <p class="text-sm text-gray-600">Submitted yesterday • 156 words</p>
+                            </div>
+                        </div>
+                        <div class="flex items-center space-x-3">
+                            <span class="bg-red-100 text-error px-3 py-1 rounded-full text-xs font-medium">Needs Revision</span>
+                            <button class="text-primary hover:text-blue-700 text-sm">
+                                <i class="fas fa-edit"></i>
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="flex items-center justify-between p-4 bg-gray-50 rounded-lg" data-mock="true">
+                        <div class="flex items-center space-x-4">
+                            <div class="bg-success p-2 rounded-lg">
+                                <i class="fas fa-file-alt text-white text-sm"></i>
+                            </div>
+                            <div>
+                                <p class="font-medium text-gray-900">Script #244 - Financial Terms</p>
+                                <p class="text-sm text-gray-600">Submitted 2 days ago • 28 seconds</p>
+                            </div>
+                        </div>
+                        <div class="flex items-center space-x-3">
+                            <span class="bg-success text-white px-3 py-1 rounded-full text-xs font-medium">Approved</span>
+                            <span class="text-success font-medium">+$5.80</span>
+                        </div>
+                    </div>
+                    <!-- @END_MAP )) -->
+                </div>
+
+                <!-- Quick Stats -->
+                <div class="mt-6 pt-6 border-t border-gray-200">
+                    <div class="grid grid-cols-3 gap-4 text-center">
+                        <div>
+                            <p class="text-2xl font-semibold text-gray-900" data-bind="stats.weeklySubmissions">12</p>
+                            <p class="text-sm text-gray-600">This Week</p>
+                        </div>
+                        <div>
+                            <p class="text-2xl font-semibold text-success" data-bind="stats.approvalRate">92%</p>
+                            <p class="text-sm text-gray-600">Approval Rate</p>
+                        </div>
+                        <div>
+                            <p class="text-2xl font-semibold text-primary" data-bind="stats.avgQuality">4.8</p>
+                            <p class="text-sm text-gray-600">Avg Quality</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <!-- @END_COMPONENT: RecentSubmissions -->
+        </div>
+
+        <!-- @COMPONENT: ReviewerInterface [quality review workflow] -->
+        <div class="mt-8 bg-surface rounded-xl shadow-sm border border-gray-200 p-6">
+            <div class="flex items-center justify-between mb-6">
+                <h2 class="text-xl font-semibold text-gray-900">Quality Review Dashboard</h2>
+                <div class="flex items-center space-x-3">
+                    <select class="border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                        <option>All Languages</option>
+                        <option>English</option>
+                        <option>Spanish</option>
+                        <option>French</option>
+                    </select>
+                    <select class="border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                        <option>All Types</option>
+                        <option>Audio Only</option>
+                        <option>Text Only</option>
+                        <option>Combined</option>
+                    </select>
+                </div>
+            </div>
+
+            <!-- Review Queue -->
+            <div class="space-y-4">
+                <!-- @MAP: reviewQueue.map(submission => ( -->
+                <div class="border border-gray-200 rounded-lg p-4 hover:bg-gray-25 transition-colors" data-mock="true">
+                    <div class="flex items-start justify-between">
+                        <div class="flex items-start space-x-4 flex-1">
+                            <div class="bg-blue-100 p-3 rounded-lg">
+                                <i class="fas fa-microphone text-primary text-lg"></i>
+                            </div>
+                            <div class="flex-1">
+                                <div class="flex items-center space-x-3 mb-2">
+                                    <h3 class="font-medium text-gray-900">Script #247 - AI Technology</h3>
+                                    <span class="bg-warning text-white px-2 py-1 rounded-full text-xs font-medium">Priority</span>
+                                    <span class="text-sm text-gray-500">Submitted by Sarah Chen</span>
+                                </div>
+                                
+                                <!-- Audio Controls -->
+                                <div class="bg-gray-50 p-3 rounded-lg mb-3">
+                                    <div class="flex items-center space-x-4 mb-2">
+                                        <button class="bg-primary text-white p-2 rounded-full hover:bg-blue-700" data-event="click:playAudio">
+                                            <i class="fas fa-play text-sm"></i>
+                                        </button>
+                                        <div class="flex-1 bg-gray-200 h-2 rounded-full">
+                                            <div class="bg-primary h-2 rounded-full" style="width: 35%"></div>
+                                        </div>
+                                        <span class="text-sm text-gray-600">00:06 / 00:18</span>
+                                        <button class="text-gray-600 hover:text-gray-800">
+                                            <i class="fas fa-volume-up"></i>
+                                        </button>
+                                    </div>
+                                    <p class="text-sm text-gray-700 leading-relaxed">
+                                        "The rapid development of artificial intelligence has transformed how we interact with technology. Machine learning algorithms now power everything from recommendation systems to autonomous vehicles..."
+                                    </p>
+                                </div>
+
+                                <!-- Quality Assessment -->
+                                <div class="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
+                                    <div class="flex items-center space-x-2">
+                                        <span class="text-gray-600">Clarity:</span>
+                                        <div class="flex space-x-1">
+                                            <i class="fas fa-star text-warning"></i>
+                                            <i class="fas fa-star text-warning"></i>
+                                            <i class="fas fa-star text-warning"></i>
+                                            <i class="fas fa-star text-warning"></i>
+                                            <i class="fas fa-star text-gray-300"></i>
+                                        </div>
+                                    </div>
+                                    <div class="flex items-center space-x-2">
+                                        <span class="text-gray-600">Background:</span>
+                                        <span class="text-success font-medium">Clean</span>
+                                    </div>
+                                    <div class="flex items-center space-x-2">
+                                        <span class="text-gray-600">Pronunciation:</span>
+                                        <span class="text-success font-medium">Excellent</span>
+                                    </div>
+                                    <div class="flex items-center space-x-2">
+                                        <span class="text-gray-600">Duration:</span>
+                                        <span class="text-gray-900">18.2s</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Review Actions -->
+                        <div class="flex flex-col space-y-2 ml-4">
+                            <button class="bg-success text-white px-4 py-2 rounded-lg hover:bg-green-600 transition-colors text-sm font-medium" 
+                                    data-event="click:approveSubmission">
+                                <i class="fas fa-check mr-2"></i>Approve
+                            </button>
+                            <button class="bg-warning text-white px-4 py-2 rounded-lg hover:bg-orange-600 transition-colors text-sm font-medium"
+                                    data-event="click:requestCorrection">
+                                <i class="fas fa-edit mr-2"></i>Request Fix
+                            </button>
+                            <button class="bg-error text-white px-4 py-2 rounded-lg hover:bg-red-600 transition-colors text-sm font-medium"
+                                    data-event="click:rejectSubmission">
+                                <i class="fas fa-times mr-2"></i>Reject
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="border border-gray-200 rounded-lg p-4 hover:bg-gray-25 transition-colors" data-mock="true">
+                    <div class="flex items-start justify-between">
+                        <div class="flex items-start space-x-4 flex-1">
+                            <div class="bg-green-100 p-3 rounded-lg">
+                                <i class="fas fa-file-alt text-success text-lg"></i>
+                            </div>
+                            <div class="flex-1">
+                                <div class="flex items-center space-x-3 mb-2">
+                                    <h3 class="font-medium text-gray-900">Custom Text - Marketing Copy</h3>
+                                    <span class="text-sm text-gray-500">Submitted by Mike Rodriguez</span>
+                                </div>
+                                
+                                <!-- Text Content -->
+                                <div class="bg-gray-50 p-3 rounded-lg mb-3">
+                                    <p class="text-sm text-gray-700 leading-relaxed">
+                                        "In today's competitive marketplace, businesses must leverage cutting-edge technology to deliver exceptional customer experiences. Our innovative solutions help companies streamline operations while maintaining the highest standards of quality and reliability."
+                                    </p>
+                                    <div class="flex items-center justify-between mt-3 text-xs text-gray-500">
+                                        <span>Word count: 34 • Reading time: ~15s</span>
+                                        <span>Category: Business</span>
+                                    </div>
+                                </div>
+
+                                <!-- Text Quality Metrics -->
+                                <div class="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
+                                    <div class="flex items-center space-x-2">
+                                        <span class="text-gray-600">Grammar:</span>
+                                        <span class="text-success font-medium">Excellent</span>
+                                    </div>
+                                    <div class="flex items-center space-x-2">
+                                        <span class="text-gray-600">Complexity:</span>
+                                        <span class="text-warning font-medium">Medium</span>
+                                    </div>
+                                    <div class="flex items-center space-x-2">
+                                        <span class="text-gray-600">Relevance:</span>
+                                        <span class="text-success font-medium">High</span>
+                                    </div>
+                                    <div class="flex items-center space-x-2">
+                                        <span class="text-gray-600">Uniqueness:</span>
+                                        <span class="text-success font-medium">95%</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Review Actions -->
+                        <div class="flex flex-col space-y-2 ml-4">
+                            <button class="bg-success text-white px-4 py-2 rounded-lg hover:bg-green-600 transition-colors text-sm font-medium">
+                                <i class="fas fa-check mr-2"></i>Approve
+                            </button>
+                            <button class="bg-primary text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium">
+                                <i class="fas fa-edit mr-2"></i>Edit & Approve
+                            </button>
+                            <button class="bg-error text-white px-4 py-2 rounded-lg hover:bg-red-600 transition-colors text-sm font-medium">
+                                <i class="fas fa-times mr-2"></i>Reject
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                <!-- @END_MAP )) -->
+            </div>
+
+            <!-- Review Stats -->
+            <div class="mt-6 pt-6 border-t border-gray-200">
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-6 text-center">
+                    <div>
+                        <p class="text-2xl font-semibold text-gray-900" data-bind="reviewStats.pending">23</p>
+                        <p class="text-sm text-gray-600">Pending Reviews</p>
+                    </div>
+                    <div>
+                        <p class="text-2xl font-semibold text-success" data-bind="reviewStats.approvedToday">18</p>
+                        <p class="text-sm text-gray-600">Approved Today</p>
+                    </div>
+                    <div>
+                        <p class="text-2xl font-semibold text-primary" data-bind="reviewStats.avgTime">6.2</p>
+                        <p class="text-sm text-gray-600">Avg Review Time (min)</p>
+                    </div>
+                    <div>
+                        <p class="text-2xl font-semibold text-warning" data-bind="reviewStats.qualityScore">4.7</p>
+                        <p class="text-sm text-gray-600">Quality Score</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <!-- @END_COMPONENT: ReviewerInterface -->
+
+        <!-- @COMPONENT: AdminDashboard [system management and analytics] -->
+        <div class="mt-8 bg-surface rounded-xl shadow-sm border border-gray-200 p-6">
+            <div class="flex items-center justify-between mb-6">
+                <h2 class="text-xl font-semibold text-gray-900">Admin Dashboard</h2>
+                <div class="flex items-center space-x-3">
+                    <button class="bg-primary text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors text-sm">
+                        <i class="fas fa-user-plus mr-2"></i>Add User
+                    </button>
+                    <button class="bg-surface text-gray-700 px-4 py-2 rounded-lg border border-gray-300 hover:bg-gray-50 transition-colors text-sm">
+                        <i class="fas fa-cog mr-2"></i>Settings
+                    </button>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                <!-- User Management -->
+                <div>
+                    <h3 class="text-lg font-medium text-gray-900 mb-4">User Management</h3>
+                    <div class="space-y-3">
+                        <!-- @MAP: users.map(user => ( -->
+                        <div class="flex items-center justify-between p-3 bg-gray-50 rounded-lg" data-mock="true">
+                            <div class="flex items-center space-x-3">
+                                <!-- Professional headshot of a person -->
+                                <img src="https://pixabay.com/get/gc0ee3097831c10bd121343adfc2fb654d062acaf55658ef94d1eeea7540fa52a75811af50ddb719ef759fc5eafcad60016504716de0fe3b0a6e0adb7e0078a32_1280.jpg" 
+                                     alt="User avatar" 
+                                     class="w-10 h-10 rounded-full object-cover">
+                                <div>
+                                    <p class="font-medium text-gray-900">Sarah Chen</p>
+                                    <p class="text-sm text-gray-600">Provider • 142 submissions</p>
+                                </div>
+                            </div>
+                            <div class="flex items-center space-x-2">
+                                <span class="bg-success text-white px-2 py-1 rounded-full text-xs font-medium">Active</span>
+                                <button class="text-gray-400 hover:text-gray-600">
+                                    <i class="fas fa-ellipsis-v"></i>
+                                </button>
+                            </div>
+                        </div>
+
+                        <div class="flex items-center justify-between p-3 bg-gray-50 rounded-lg" data-mock="true">
+                            <div class="flex items-center space-x-3">
+                                <!-- Professional headshot of a person -->
+                                <img src="https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?ixlib=rb-4.0.3&ixid=MnwxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8&auto=format&fit=crop&w=150&h=150" 
+                                     alt="User avatar" 
+                                     class="w-10 h-10 rounded-full object-cover">
+                                <div>
+                                    <p class="font-medium text-gray-900">Mike Rodriguez</p>
+                                    <p class="text-sm text-gray-600">Reviewer • 89 reviews</p>
+                                </div>
+                            </div>
+                            <div class="flex items-center space-x-2">
+                                <span class="bg-success text-white px-2 py-1 rounded-full text-xs font-medium">Active</span>
+                                <button class="text-gray-400 hover:text-gray-600">
+                                    <i class="fas fa-ellipsis-v"></i>
+                                </button>
+                            </div>
+                        </div>
+                        <!-- @END_MAP )) -->
+                    </div>
+                </div>
+
+                <!-- System Analytics -->
+                <div>
+                    <h3 class="text-lg font-medium text-gray-900 mb-4">System Analytics</h3>
+                    <div class="grid grid-cols-2 gap-4">
+                        <div class="bg-blue-50 p-4 rounded-lg">
+                            <p class="text-sm font-medium text-blue-700">Total Users</p>
+                            <p class="text-2xl font-semibold text-blue-900" data-bind="analytics.totalUsers">47</p>
+                            <p class="text-sm text-blue-600 mt-1">+3 this week</p>
+                        </div>
+                        <div class="bg-green-50 p-4 rounded-lg">
+                            <p class="text-sm font-medium text-green-700">Data Quality</p>
+                            <p class="text-2xl font-semibold text-green-900" data-bind="analytics.qualityScore">94.2%</p>
+                            <p class="text-sm text-green-600 mt-1">Above target</p>
+                        </div>
+                        <div class="bg-purple-50 p-4 rounded-lg">
+                            <p class="text-sm font-medium text-purple-700">Storage Used</p>
+                            <p class="text-2xl font-semibold text-purple-900" data-bind="analytics.storageUsed">2.4 TB</p>
+                            <p class="text-sm text-purple-600 mt-1">of 10 TB</p>
+                        </div>
+                        <div class="bg-orange-50 p-4 rounded-lg">
+                            <p class="text-sm font-medium text-orange-700">Monthly Cost</p>
+                            <p class="text-2xl font-semibold text-orange-900" data-bind="analytics.monthlyCost">$1,247</p>
+                            <p class="text-sm text-orange-600 mt-1">Within budget</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Billing Configuration -->
+            <div class="mt-8 pt-6 border-t border-gray-200">
+                <h3 class="text-lg font-medium text-gray-900 mb-4">Billing Configuration</h3>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    <div class="bg-gray-50 p-4 rounded-lg">
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Audio Rate (per minute)</label>
+                        <div class="flex items-center space-x-2">
+                            <span class="text-gray-500">$</span>
+                            <input type="number" value="12.50" class="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm" data-bind="billing.audioRate">
+                        </div>
+                    </div>
+                    <div class="bg-gray-50 p-4 rounded-lg">
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Text Rate (per word)</label>
+                        <div class="flex items-center space-x-2">
+                            <span class="text-gray-500">$</span>
+                            <input type="number" value="0.08" class="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm" data-bind="billing.textRate">
+                        </div>
+                    </div>
+                    <div class="bg-gray-50 p-4 rounded-lg">
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Quality Bonus</label>
+                        <div class="flex items-center space-x-2">
+                            <input type="number" value="15" class="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm" data-bind="billing.qualityBonus">
+                            <span class="text-gray-500">%</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="flex justify-end mt-4">
+                    <button class="bg-primary text-white px-6 py-2 rounded-lg hover:bg-blue-700 transition-colors" 
+                            data-event="click:updateBillingRates">
+                        Update Rates
+                    </button>
+                </div>
+            </div>
+        </div>
+        <!-- @END_COMPONENT: AdminDashboard -->
+    </div>
+
+    <!-- @COMPONENT: FloatingNotifications [real-time status updates] -->
+    <div class="fixed bottom-4 right-4 space-y-3 z-50" id="notifications">
+        <!-- @STATE: notifications:array = [] -->
+        <div class="bg-success text-white p-4 rounded-lg shadow-lg flex items-center space-x-3 transform transition-transform" data-mock="true">
+            <i class="fas fa-check-circle text-lg"></i>
+            <div>
+                <p class="font-medium">Submission Approved!</p>
+                <p class="text-sm opacity-90">Script #246 has been approved. +$4.20 earned.</p>
+            </div>
+            <button class="text-white hover:text-gray-200" data-event="click:dismissNotification">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+    </div>
+    <!-- @END_COMPONENT: FloatingNotifications -->
+
+    <script>
+        // TODO: Implement Web Audio API for recording functionality
+        // TODO: Implement real-time submission status updates via WebSocket
+        // TODO: Implement file upload with progress tracking
+        // TODO: Implement audio waveform visualization
+        // TODO: Implement billing calculation logic
+
+        (function() {
+            // Mock interactive functionality for demonstration
+            
+            // Recording state management
+            let isRecording = false;
+            let recordingDuration = 0;
+            let recordingInterval;
+
+            // Audio recording simulation
+            function startRecording() {
+                if (isRecording) return;
+                
+                isRecording = true;
+                recordingDuration = 0;
+                
+                const statusEl = document.getElementById('recordingStatus');
+                const recordBtn = document.querySelector('[data-event="click:startRecording"]');
+                
+                statusEl.classList.remove('bg-gray-50', 'border-gray-200');
+                statusEl.classList.add('bg-red-50', 'border-red-200');
+                
+                recordBtn.innerHTML = '<i class="fas fa-stop text-xl"></i>';
+                recordBtn.classList.remove('bg-error');
+                recordBtn.classList.add('bg-gray-600');
+                
+                recordingInterval = setInterval(() => {
+                    recordingDuration++;
+                    const minutes = Math.floor(recordingDuration / 60);
+                    const seconds = recordingDuration % 60;
+                    const timeString = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+                    
+                    const durationEl = statusEl.querySelector('[data-bind="recording.duration"]');
+                    if (durationEl) {
+                        durationEl.textContent = timeString;
+                    }
+                }, 1000);
+            }
+
+            function stopRecording() {
+                if (!isRecording) return;
+                
+                isRecording = false;
+                clearInterval(recordingInterval);
+                
+                const statusEl = document.getElementById('recordingStatus');
+                const recordBtn = document.querySelector('[data-event="click:startRecording"]');
+                
+                statusEl.classList.remove('bg-red-50', 'border-red-200');
+                statusEl.classList.add('bg-green-50', 'border-green-200');
+                statusEl.querySelector('.text-error').textContent = 'Recording completed';
+                statusEl.querySelector('.bg-error').classList.remove('bg-error', 'animate-pulse');
+                statusEl.querySelector('.bg-error').classList.add('bg-success');
+                
+                recordBtn.innerHTML = '<i class="fas fa-microphone text-xl"></i>';
+                recordBtn.classList.remove('bg-gray-600');
+                recordBtn.classList.add('bg-error');
+            }
+
+            // Event delegation for dynamic buttons
+            document.addEventListener('click', function(e) {
+                const target = e.target.closest('[data-event]');
+                if (!target) return;
+                
+                const eventType = target.getAttribute('data-event');
+                
+                switch(eventType) {
+                    case 'click:startRecording':
+                        if (isRecording) {
+                            stopRecording();
+                        } else {
+                            startRecording();
+                        }
+                        break;
+                    case 'click:stopRecording':
+                        stopRecording();
+                        break;
+                    case 'click:submitRecording':
+                        if (recordingDuration > 0) {
+                            // Show success notification
+                            showNotification('Recording submitted successfully!', 'success');
+                        }
+                        break;
+                    case 'click:dismissNotification':
+                        target.closest('.bg-success, .bg-error, .bg-warning').remove();
+                        break;
+                }
+            });
+
+            function showNotification(message, type = 'success') {
+                const notification = document.createElement('div');
+                const colors = {
+                    success: 'bg-success',
+                    error: 'bg-error',
+                    warning: 'bg-warning'
+                };
+                
+                notification.className = `${colors[type]} text-white p-4 rounded-lg shadow-lg flex items-center space-x-3 transform transition-transform`;
+                notification.innerHTML = `
+                    <i class="fas fa-check-circle text-lg"></i>
+                    <div>
+                        <p class="font-medium">${message}</p>
+                    </div>
+                    <button class="text-white hover:text-gray-200" data-event="click:dismissNotification">
+                        <i class="fas fa-times"></i>
+                    </button>
+                `;
+                
+                document.getElementById('notifications').appendChild(notification);
+                
+                // Auto-dismiss after 5 seconds
+                setTimeout(() => {
+                    if (notification.parentNode) {
+                        notification.remove();
+                    }
+                }, 5000);
+            }
+        })();
+    </script>
+</body>
+</html>

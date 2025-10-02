@@ -1,0 +1,95 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database Service (INTERNAL ONLY - NO PUBLIC EXPOSURE)
+  postgres:
+    image: postgres:15-alpine
+    container_name: voicescript_postgres
+    environment:
+      POSTGRES_DB: voicescript_db
+      POSTGRES_USER: voicescript_user
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-voicescript_password}  # CHANGE THIS!
+    # NO PORTS EXPOSED - Database only accessible within Docker network
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - voicescript_network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U voicescript_user -d voicescript_db"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Flask Application Service (INTERNAL ONLY - Behind nginx)
+  web:
+    build: .
+    container_name: voicescript_app
+    # NO PUBLIC PORT EXPOSURE - Only accessible via nginx
+    expose:
+      - "8000"
+    environment:
+      - DATABASE_URL=postgresql://voicescript_user:${POSTGRES_PASSWORD:-voicescript_password}@postgres:5432/voicescript_db
+      - FLASK_ENV=production
+      - SECRET_KEY=${SECRET_KEY}  # MUST be set in .env file!
+      - USE_HTTPS=true  # CRITICAL for public deployment
+      - ENABLE_WEBVIEW_FALLBACK=false  # Security: disabled in production
+      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID:-}
+      - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET:-}
+    volumes:
+      - ./uploads:/app/uploads
+      - ./logs:/app/logs
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - voicescript_network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://127.0.0.1:8000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  # Nginx Reverse Proxy with HTTPS
+  nginx:
+    image: nginx:alpine
+    container_name: voicescript_nginx
+    ports:
+      - "80:80"    # HTTP (for Let's Encrypt challenges and redirect)
+      - "443:443"  # HTTPS (secure traffic)
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/conf.d:/etc/nginx/conf.d:ro
+      - certbot_conf:/etc/letsencrypt:ro
+      - certbot_www:/var/www/certbot:ro
+    depends_on:
+      web:
+        condition: service_healthy
+    networks:
+      - voicescript_network
+    restart: unless-stopped
+    command: "/bin/sh -c 'while :; do sleep 6h & wait $${!}; nginx -s reload; done & nginx -g \"daemon off;\"'"
+
+  # Certbot for Let's Encrypt SSL Certificates
+  certbot:
+    image: certbot/certbot
+    container_name: voicescript_certbot
+    volumes:
+      - certbot_conf:/etc/letsencrypt
+      - certbot_www:/var/www/certbot
+    entrypoint: "/bin/sh -c 'trap exit TERM; while :; do certbot renew; sleep 12h & wait $${!}; done;'"
+
+networks:
+  voicescript_network:
+    driver: bridge
+
+volumes:
+  postgres_data:
+    driver: local
+  certbot_conf:
+    external: true
+    name: certbot_conf
+  certbot_www:
+    external: true
+    name: certbot_www

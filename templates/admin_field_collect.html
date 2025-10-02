@@ -1,0 +1,462 @@
+{% extends "base.html" %}
+
+{% block title %}Field Collection - VoiceScript Collector{% endblock %}
+
+{% block content %}
+<div class="min-h-screen bg-gray-50">
+    <!-- Header -->
+    <div class="bg-white shadow-sm">
+        <div class="max-w-4xl mx-auto px-4 sm:px-6 py-4">
+            <div class="flex items-center justify-between">
+                <h1 class="text-xl sm:text-2xl font-bold text-gray-900">Field Data Collection</h1>
+                <a href="{{ url_for('admin_dashboard') }}" class="text-blue-600 hover:text-blue-800 text-sm">
+                    <i class="fas fa-arrow-left mr-1"></i> Back to Dashboard
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main interface -->
+    <div class="max-w-4xl mx-auto px-4 sm:px-6 py-6">
+        <!-- Language selector -->
+        <div class="bg-white rounded-lg shadow-sm p-4 mb-4">
+            <label for="languageSelector" class="block text-sm font-medium text-gray-700 mb-2">Select Language</label>
+            <select id="languageSelector" class="w-full px-3 py-2 border border-gray-300 rounded-md text-base" data-testid="select-language">
+                {% for language in languages %}
+                <option value="{{ language.code }}" {% if language.code == 'en' %}selected{% endif %}>
+                    {{ language.name }}
+                </option>
+                {% endfor %}
+            </select>
+        </div>
+
+        <!-- Speaker Information Form -->
+        <div class="bg-white rounded-lg shadow-sm p-4 sm:p-6 mb-4">
+            <h2 class="text-lg font-semibold text-gray-900 mb-4">Speaker Information</h2>
+            
+            <div class="space-y-4">
+                <!-- Speaker Name (Optional) -->
+                <div>
+                    <label for="speakerName" class="block text-sm font-medium text-gray-700 mb-1">
+                        Speaker Name <span class="text-gray-500 text-xs">(Optional)</span>
+                    </label>
+                    <input type="text" id="speakerName" class="w-full px-3 py-2 border border-gray-300 rounded-md text-base" placeholder="Optional" data-testid="input-speaker-name">
+                </div>
+
+                <!-- Gender (Required) -->
+                <div>
+                    <label for="speakerGender" class="block text-sm font-medium text-gray-700 mb-1">
+                        Gender <span class="text-red-500">*</span>
+                    </label>
+                    <select id="speakerGender" class="w-full px-3 py-2 border border-gray-300 rounded-md text-base" required data-testid="select-gender">
+                        <option value="">Select gender...</option>
+                        <option value="male">Male</option>
+                        <option value="female">Female</option>
+                        <option value="non-binary">Non-Binary</option>
+                        <option value="prefer-not-to-say">Prefer Not to Say</option>
+                    </select>
+                </div>
+
+                <!-- Age Group (Required) -->
+                <div>
+                    <label for="speakerAgeGroup" class="block text-sm font-medium text-gray-700 mb-1">
+                        Age Group <span class="text-red-500">*</span>
+                    </label>
+                    <select id="speakerAgeGroup" class="w-full px-3 py-2 border border-gray-300 rounded-md text-base" required data-testid="select-age-group">
+                        <option value="">Select age group...</option>
+                        <option value="child">Child (0-12)</option>
+                        <option value="teen">Teen (13-19)</option>
+                        <option value="adult">Adult (20-59)</option>
+                        <option value="elderly">Elderly (60+)</option>
+                    </select>
+                </div>
+
+                <!-- Location (Optional) -->
+                <div>
+                    <label for="speakerLocation" class="block text-sm font-medium text-gray-700 mb-1">
+                        Location <span class="text-gray-500 text-xs">(Optional)</span>
+                    </label>
+                    <input type="text" id="speakerLocation" class="w-full px-3 py-2 border border-gray-300 rounded-md text-base" placeholder="e.g., Dhaka, Bangladesh" data-testid="input-location">
+                </div>
+            </div>
+        </div>
+
+        <!-- Recording Interface -->
+        <div id="recordingSection" class="hidden">
+            <!-- Script display -->
+            <div class="bg-white rounded-lg shadow-sm p-4 sm:p-6 mb-4">
+                <div class="text-center">
+                    <h3 class="text-base sm:text-lg font-semibold text-gray-800 mb-3">Ask the speaker to read:</h3>
+                    <div id="scriptContent" class="text-lg sm:text-xl leading-relaxed text-gray-900 px-3 py-4 bg-gray-50 rounded-lg min-h-[100px]"></div>
+                    <button id="changeScriptButton" class="mt-3 text-sm text-blue-600 hover:text-blue-800" data-testid="button-change-script">
+                        <i class="fas fa-sync-alt mr-1"></i> Change Script
+                    </button>
+                </div>
+            </div>
+
+            <!-- Recording controls -->
+            <div class="bg-white rounded-lg shadow-sm p-4 sm:p-6">
+                <div class="text-center space-y-4">
+                    <!-- Recording status -->
+                    <div id="recordingStatus" class="text-base sm:text-lg font-medium text-gray-600">Ready to record</div>
+
+                    <!-- Big record button -->
+                    <div class="flex justify-center">
+                        <button id="recordButton" 
+                                class="w-24 h-24 sm:w-32 sm:h-32 rounded-full bg-red-500 hover:bg-red-600 active:bg-red-700 text-white text-2xl sm:text-3xl font-bold transition-all duration-200 transform active:scale-95 focus:outline-none focus:ring-4 focus:ring-red-200" 
+                                data-testid="button-record">
+                            ●
+                        </button>
+                    </div>
+
+                    <!-- Audio playback -->
+                    <div id="audioPlayback" class="hidden">
+                        <audio id="recordedAudio" controls class="w-full max-w-md mx-auto"></audio>
+                    </div>
+
+                    <!-- Real-time Transcript -->
+                    <div id="transcriptContainer" class="hidden mt-4 bg-blue-50 border-2 border-blue-200 rounded-lg p-4 max-w-md mx-auto">
+                        <div class="flex items-start space-x-2 mb-2">
+                            <i class="fas fa-microphone-alt text-blue-600 mt-1"></i>
+                            <div class="flex-1">
+                                <h5 class="font-medium text-blue-900 mb-1">Live Transcript</h5>
+                                <div id="transcript" class="text-gray-700 min-h-[60px] whitespace-pre-wrap leading-relaxed">
+                                    Listening...
+                                </div>
+                            </div>
+                        </div>
+                        <div class="text-xs text-blue-600">
+                            <i class="fas fa-info-circle mr-1"></i>
+                            <span id="transcriptStatus">Speech recognition active</span>
+                        </div>
+                    </div>
+
+                    <!-- Action buttons -->
+                    <div class="flex flex-col sm:flex-row justify-center gap-3 pt-4">
+                        <button id="reRecordButton" 
+                                class="px-6 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 active:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed text-base" 
+                                disabled
+                                data-testid="button-rerecord">
+                            <i class="fas fa-redo mr-2"></i> Re-Record
+                        </button>
+                        <button id="submitButton" 
+                                class="px-8 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 active:bg-green-800 focus:outline-none focus:ring-2 focus:ring-green-500 disabled:opacity-50 disabled:cursor-not-allowed text-base font-medium"
+                                disabled
+                                data-testid="button-submit">
+                            <i class="fas fa-check mr-2"></i> Submit Recording
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Success message -->
+            <div id="successMessage" class="hidden mt-4 p-4 bg-green-50 border border-green-200 rounded-lg">
+                <div class="flex items-center justify-center text-green-800">
+                    <i class="fas fa-check-circle text-2xl mr-3"></i>
+                    <div>
+                        <div class="font-semibold">Recording submitted successfully!</div>
+                        <div class="text-sm">Ready for next speaker</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Load Script Button -->
+        <div id="loadScriptSection" class="bg-white rounded-lg shadow-sm p-6">
+            <button id="loadScriptButton" 
+                    class="w-full py-4 bg-blue-600 text-white rounded-lg hover:bg-blue-700 active:bg-blue-800 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed text-lg font-medium"
+                    data-testid="button-load-script">
+                <i class="fas fa-arrow-right mr-2"></i> Load Script & Start Recording
+            </button>
+            <p class="text-center text-sm text-gray-500 mt-3">Fill in speaker information first</p>
+        </div>
+    </div>
+</div>
+
+<script>
+class FieldCollectionRecorder {
+    constructor() {
+        this.currentScript = null;
+        this.mediaRecorder = null;
+        this.audioChunks = [];
+        this.isRecording = false;
+        this.recordedBlob = null;
+        this.speechRecognition = null;
+        
+        this.initializeElements();
+        this.setupEventListeners();
+    }
+    
+    initializeElements() {
+        this.languageSelector = document.getElementById('languageSelector');
+        this.speakerName = document.getElementById('speakerName');
+        this.speakerGender = document.getElementById('speakerGender');
+        this.speakerAgeGroup = document.getElementById('speakerAgeGroup');
+        this.speakerLocation = document.getElementById('speakerLocation');
+        this.loadScriptSection = document.getElementById('loadScriptSection');
+        this.loadScriptButton = document.getElementById('loadScriptButton');
+        this.recordingSection = document.getElementById('recordingSection');
+        this.scriptContent = document.getElementById('scriptContent');
+        this.changeScriptButton = document.getElementById('changeScriptButton');
+        this.recordingStatus = document.getElementById('recordingStatus');
+        this.recordButton = document.getElementById('recordButton');
+        this.audioPlayback = document.getElementById('audioPlayback');
+        this.recordedAudio = document.getElementById('recordedAudio');
+        this.reRecordButton = document.getElementById('reRecordButton');
+        this.submitButton = document.getElementById('submitButton');
+        this.successMessage = document.getElementById('successMessage');
+        this.transcriptContainer = document.getElementById('transcriptContainer');
+        this.transcript = document.getElementById('transcript');
+        this.transcriptStatus = document.getElementById('transcriptStatus');
+    }
+    
+    setupEventListeners() {
+        this.loadScriptButton.addEventListener('click', () => this.loadScript());
+        this.changeScriptButton.addEventListener('click', () => this.loadScript());
+        this.recordButton.addEventListener('click', () => this.toggleRecording());
+        this.reRecordButton.addEventListener('click', () => this.resetRecording());
+        this.submitButton.addEventListener('click', () => this.submitRecording());
+        
+        // Enable/disable load script button based on required fields
+        [this.speakerGender, this.speakerAgeGroup].forEach(input => {
+            input.addEventListener('change', () => this.validateForm());
+        });
+    }
+    
+    validateForm() {
+        const isValid = this.speakerGender.value && this.speakerAgeGroup.value;
+        this.loadScriptButton.disabled = !isValid;
+        return isValid;
+    }
+    
+    async loadScript() {
+        if (!this.validateForm()) {
+            alert('Please fill in speaker gender and age group');
+            return;
+        }
+        
+        try {
+            const language = this.languageSelector.value;
+            const response = await fetch(`/api/scripts?language=${language}&page=1&page_size=1`);
+            const data = await response.json();
+            
+            if (data.items && data.items.length > 0) {
+                // Get random script from available scripts
+                const randomIndex = Math.floor(Math.random() * Math.min(data.total, 10));
+                const scriptResponse = await fetch(`/api/scripts?language=${language}&page=1&page_size=20`);
+                const scriptData = await scriptResponse.json();
+                
+                if (scriptData.items && scriptData.items.length > 0) {
+                    const script = scriptData.items[Math.floor(Math.random() * scriptData.items.length)];
+                    
+                    // Get full script content
+                    const detailsResponse = await fetch(`/api/scripts/${script.id}/details`);
+                    this.currentScript = await detailsResponse.json();
+                    
+                    this.scriptContent.textContent = this.currentScript.content;
+                    this.showRecordingSection();
+                } else {
+                    alert('No scripts available for this language');
+                }
+            } else {
+                alert('No scripts available for this language');
+            }
+        } catch (error) {
+            console.error('Error loading script:', error);
+            alert('Error loading script. Please try again.');
+        }
+    }
+    
+    showRecordingSection() {
+        this.loadScriptSection.classList.add('hidden');
+        this.recordingSection.classList.remove('hidden');
+        this.resetRecording();
+    }
+    
+    async toggleRecording() {
+        if (this.isRecording) {
+            this.stopRecording();
+        } else {
+            await this.startRecording();
+        }
+    }
+    
+    async startRecording() {
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            this.mediaRecorder = new MediaRecorder(stream);
+            this.audioChunks = [];
+            
+            this.mediaRecorder.addEventListener('dataavailable', event => {
+                this.audioChunks.push(event.data);
+            });
+            
+            this.mediaRecorder.addEventListener('stop', () => {
+                const audioBlob = new Blob(this.audioChunks, { type: 'audio/webm' });
+                this.recordedBlob = audioBlob;
+                const audioUrl = URL.createObjectURL(audioBlob);
+                this.recordedAudio.src = audioUrl;
+                this.audioPlayback.classList.remove('hidden');
+                this.submitButton.disabled = false;
+                this.reRecordButton.disabled = false;
+            });
+            
+            this.mediaRecorder.start();
+            this.isRecording = true;
+            this.recordButton.classList.remove('bg-red-500', 'hover:bg-red-600');
+            this.recordButton.classList.add('bg-gray-700', 'hover:bg-gray-800');
+            this.recordButton.textContent = '■';
+            this.recordingStatus.textContent = 'Recording... (Click to stop)';
+            this.recordingStatus.classList.add('text-red-600', 'font-semibold');
+            
+            // Start speech recognition
+            if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
+                const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+                this.speechRecognition = new SpeechRecognition();
+                this.speechRecognition.continuous = true;
+                this.speechRecognition.interimResults = true;
+                this.speechRecognition.lang = 'en-US';
+                
+                let finalTranscript = '';
+                
+                this.speechRecognition.onresult = (event) => {
+                    let interimTranscript = '';
+                    for (let i = event.resultIndex; i < event.results.length; i++) {
+                        const transcript = event.results[i][0].transcript;
+                        if (event.results[i].isFinal) {
+                            finalTranscript += transcript + ' ';
+                        } else {
+                            interimTranscript += transcript;
+                        }
+                    }
+                    this.transcript.innerHTML = finalTranscript + 
+                        '<span style="color: #9CA3AF;">' + interimTranscript + '</span>';
+                };
+                
+                this.speechRecognition.onerror = (event) => {
+                    if (event.error === 'no-speech') {
+                        this.transcriptStatus.textContent = 'No speech detected';
+                    }
+                };
+                
+                this.speechRecognition.onend = () => {
+                    if (this.isRecording) {
+                        this.speechRecognition.start();
+                    }
+                };
+                
+                try {
+                    this.speechRecognition.start();
+                    this.transcriptContainer.classList.remove('hidden');
+                    this.transcript.textContent = 'Listening...';
+                } catch (error) {
+                    console.error('Speech recognition error:', error);
+                }
+            }
+        } catch (error) {
+            console.error('Error accessing microphone:', error);
+            alert('Could not access microphone. Please grant permission and try again.');
+        }
+    }
+    
+    stopRecording() {
+        if (this.mediaRecorder && this.isRecording) {
+            this.mediaRecorder.stop();
+            this.mediaRecorder.stream.getTracks().forEach(track => track.stop());
+            this.isRecording = false;
+            
+            // Stop speech recognition
+            if (this.speechRecognition) {
+                this.speechRecognition.stop();
+                this.transcriptStatus.textContent = 'Transcription complete';
+            }
+            
+            this.recordButton.classList.remove('bg-gray-700', 'hover:bg-gray-800');
+            this.recordButton.classList.add('bg-red-500', 'hover:bg-red-600');
+            this.recordButton.textContent = '●';
+            this.recordingStatus.textContent = 'Recording complete - Review and submit';
+            this.recordingStatus.classList.remove('text-red-600', 'font-semibold');
+        }
+    }
+    
+    resetRecording() {
+        this.recordedBlob = null;
+        this.audioPlayback.classList.add('hidden');
+        this.transcriptContainer.classList.add('hidden');
+        this.submitButton.disabled = true;
+        this.reRecordButton.disabled = true;
+        this.recordingStatus.textContent = 'Ready to record';
+        this.recordingStatus.classList.remove('text-red-600', 'font-semibold');
+        this.successMessage.classList.add('hidden');
+    }
+    
+    async submitRecording() {
+        if (!this.recordedBlob || !this.currentScript) {
+            alert('Please record audio first');
+            return;
+        }
+        
+        this.submitButton.disabled = true;
+        this.submitButton.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i> Submitting...';
+        
+        try {
+            const formData = new FormData();
+            formData.append('audio_file', this.recordedBlob, 'recording.webm');
+            formData.append('script_id', this.currentScript.id);
+            formData.append('provider_gender', this.speakerGender.value);
+            formData.append('provider_age_group', this.speakerAgeGroup.value);
+            
+            if (this.speakerName.value.trim()) {
+                formData.append('speaker_name', this.speakerName.value.trim());
+            }
+            if (this.speakerLocation.value.trim()) {
+                formData.append('speaker_location', this.speakerLocation.value.trim());
+            }
+            
+            const response = await fetch('/admin/field-collect/submit', {
+                method: 'POST',
+                body: formData
+            });
+            
+            if (!response.ok) {
+                const errorText = await response.text();
+                console.error('Server error response:', errorText);
+                throw new Error(`Server error: ${response.status} ${response.statusText}`);
+            }
+            
+            const result = await response.json();
+            
+            if (result.success) {
+                this.successMessage.classList.remove('hidden');
+                this.resetRecording();
+                
+                // Clear speaker-specific fields
+                this.speakerName.value = '';
+                this.speakerLocation.value = '';
+                // Keep gender and age group for repeated recordings from same demographic
+                
+                // Auto-load next script after 2 seconds
+                setTimeout(() => {
+                    this.successMessage.classList.add('hidden');
+                    this.loadScript();  // Automatically load next script
+                }, 2000);
+            } else {
+                alert('Error submitting recording: ' + result.message);
+                this.submitButton.disabled = false;
+            }
+        } catch (error) {
+            console.error('Error submitting recording:', error);
+            alert('Error submitting recording. Please try again.');
+            this.submitButton.disabled = false;
+        } finally {
+            this.submitButton.innerHTML = '<i class="fas fa-check mr-2"></i> Submit Recording';
+        }
+    }
+}
+
+// Initialize when DOM is ready
+document.addEventListener('DOMContentLoaded', () => {
+    new FieldCollectionRecorder();
+});
+</script>
+{% endblock %}

@@ -1,0 +1,241 @@
+{% extends "base.html" %}
+
+{% block title %}Pricing Management - VoiceScript Collector{% endblock %}
+
+{% block content %}
+<div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <!-- Header -->
+    <div class="bg-white rounded-lg shadow-sm p-6 mb-8">
+        <h1 class="text-2xl font-bold text-gray-900">Pricing Management</h1>
+        <p class="text-gray-600 mt-1">Set payment rates for providers and reviewers by language</p>
+    </div>
+
+    <!-- Pricing Overview -->
+    <div class="bg-white rounded-lg shadow-sm mb-8">
+        <div class="px-6 py-4 border-b border-gray-200">
+            <h2 class="text-lg font-semibold text-gray-900">Payment Structure</h2>
+        </div>
+        <div class="p-6">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div class="bg-blue-50 rounded-lg p-4">
+                    <h3 class="font-medium text-blue-900 mb-2">Provider Payments</h3>
+                    <p class="text-blue-700 text-sm">Providers are paid per word for approved submissions. Rate varies by language complexity.</p>
+                </div>
+                <div class="bg-green-50 rounded-lg p-4">
+                    <h3 class="font-medium text-green-900 mb-2">Reviewer Payments</h3>
+                    <p class="text-green-700 text-sm">Reviewers receive a fixed amount per approved submission regardless of word count.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Pricing Table -->
+    <div class="bg-white rounded-lg shadow-sm">
+        <div class="px-6 py-4 border-b border-gray-200">
+            <h2 class="text-lg font-semibold text-gray-900">Language-Specific Rates</h2>
+        </div>
+        <div class="overflow-x-auto">
+            <table class="min-w-full divide-y divide-gray-200">
+                <thead class="bg-gray-50">
+                    <tr>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Language</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Code</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Provider Rate (per word)</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Reviewer Rate (per submission)</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                    </tr>
+                </thead>
+                <tbody class="bg-white divide-y divide-gray-200">
+                    {% for language in languages %}
+                    {% set pricing = pricing_dict.get(language.code) %}
+                    <tr id="row-{{ language.code }}">
+                        <td class="px-6 py-4 whitespace-nowrap">
+                            <div class="text-sm font-medium text-gray-900">{{ language.name }}</div>
+                            {% if language.native_name %}
+                            <div class="text-sm text-gray-500">{{ language.native_name }}</div>
+                            {% endif %}
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{{ language.code.upper() }}</td>
+                        <td class="px-6 py-4 whitespace-nowrap">
+                            <div class="flex items-center">
+                                <span class="text-gray-500 mr-1 currency-symbol" data-currency="{{ pricing.currency if pricing else 'USD' }}">
+                                    {% if pricing and pricing.currency == 'EUR' %}€
+                                    {% elif pricing and pricing.currency == 'BDT' %}৳
+                                    {% elif pricing and pricing.currency == 'GBP' %}£
+                                    {% elif pricing and pricing.currency == 'JPY' %}¥
+                                    {% elif pricing and pricing.currency == 'INR' %}₹
+                                    {% elif pricing and pricing.currency == 'CAD' %}C$
+                                    {% elif pricing and pricing.currency == 'AUD' %}A$
+                                    {% else %}${% endif %}
+                                </span>
+                                <input type="number" 
+                                       step="0.001" 
+                                       min="0" 
+                                       value="{{ '%.3f'|format(pricing.provider_rate_per_word if pricing else 0.010) }}"
+                                       class="provider-rate w-24 px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                       data-language="{{ language.code }}"
+                                       placeholder="0.010">
+                            </div>
+                            <div class="text-xs text-gray-500 mt-1">per word</div>
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap">
+                            <div class="flex items-center">
+                                <span class="text-gray-500 mr-1 currency-symbol" data-currency="{{ pricing.currency if pricing else 'USD' }}">
+                                    {% if pricing and pricing.currency == 'EUR' %}€
+                                    {% elif pricing and pricing.currency == 'BDT' %}৳
+                                    {% elif pricing and pricing.currency == 'GBP' %}£
+                                    {% elif pricing and pricing.currency == 'JPY' %}¥
+                                    {% elif pricing and pricing.currency == 'INR' %}₹
+                                    {% elif pricing and pricing.currency == 'CAD' %}C$
+                                    {% elif pricing and pricing.currency == 'AUD' %}A$
+                                    {% else %}${% endif %}
+                                </span>
+                                <input type="number" 
+                                       step="0.01" 
+                                       min="0" 
+                                       value="{{ '%.2f'|format(pricing.reviewer_rate_per_submission if pricing else 2.00) }}"
+                                       class="reviewer-rate w-24 px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                       data-language="{{ language.code }}"
+                                       placeholder="2.00">
+                            </div>
+                            <div class="text-xs text-gray-500 mt-1">per review</div>
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                            <button onclick="updatePricing('{{ language.code }}')" 
+                                    class="bg-blue-600 text-white px-3 py-1 rounded hover:bg-blue-700 mr-2">
+                                <i class="fas fa-save mr-1"></i>Save
+                            </button>
+                            <div class="mt-1">
+                                {% if pricing %}
+                                <span class="text-green-600 text-xs">
+                                    <i class="fas fa-check mr-1"></i>Custom rates
+                                </span>
+                                {% else %}
+                                <span class="text-yellow-600 text-xs">
+                                    <i class="fas fa-exclamation-triangle mr-1"></i>Using defaults
+                                </span>
+                                {% endif %}
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+
+
+    <div class="mt-6">
+        <a href="{{ url_for('admin_dashboard') }}" 
+           class="inline-flex items-center text-gray-600 hover:text-gray-900">
+            <i class="fas fa-arrow-left mr-2"></i>
+            Back to Admin Dashboard
+        </a>
+    </div>
+</div>
+
+<script>
+function updatePricing(languageCode) {
+    const row = document.getElementById(`row-${languageCode}`);
+    const providerRate = row.querySelector('.provider-rate').value;
+    const reviewerRate = row.querySelector('.reviewer-rate').value;
+    
+    fetch('/api/pricing/update', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+            language_code: languageCode,
+            provider_rate: parseFloat(providerRate),
+            reviewer_rate: parseFloat(reviewerRate)
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            // Show success feedback
+            const statusSpan = row.querySelector('td:last-child span:last-child');
+            statusSpan.className = 'text-green-600 text-xs';
+            statusSpan.innerHTML = '<i class="fas fa-check mr-1"></i>Updated';
+            
+            // Show temporary success message
+            showMessage('Pricing updated successfully for ' + languageCode.toUpperCase(), 'success');
+        } else {
+            showMessage('Error updating pricing', 'error');
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        showMessage('Error updating pricing', 'error');
+    });
+}
+
+function applyBulkRates() {
+    const providerRate = document.getElementById('bulkProviderRate').value;
+    const reviewerRate = document.getElementById('bulkReviewerRate').value;
+    
+    if (!confirm(`Apply provider rate $${providerRate} and reviewer rate $${reviewerRate} to all languages?`)) {
+        return;
+    }
+    
+    // Update all input fields
+    document.querySelectorAll('.provider-rate').forEach(input => {
+        input.value = parseFloat(providerRate).toFixed(3);
+    });
+    
+    document.querySelectorAll('.reviewer-rate').forEach(input => {
+        input.value = parseFloat(reviewerRate).toFixed(2);
+    });
+    
+    // Update all languages
+    const languages = {{ languages|map(attribute='code')|list|tojson }};
+    let promises = languages.map(code => 
+        fetch('/api/pricing/update', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                language_code: code,
+                provider_rate: parseFloat(providerRate),
+                reviewer_rate: parseFloat(reviewerRate)
+            })
+        })
+    );
+    
+    Promise.all(promises)
+        .then(responses => Promise.all(responses.map(r => r.json())))
+        .then(results => {
+            const successful = results.filter(r => r.success).length;
+            showMessage(`Updated pricing for ${successful} languages`, 'success');
+            
+            // Update status indicators
+            document.querySelectorAll('tbody tr').forEach(row => {
+                const statusSpan = row.querySelector('td:last-child span:last-child');
+                statusSpan.className = 'text-green-600 text-xs';
+                statusSpan.innerHTML = '<i class="fas fa-check mr-1"></i>Updated';
+            });
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            showMessage('Error applying bulk rates', 'error');
+        });
+}
+
+function showMessage(message, type) {
+    // Create temporary message element
+    const messageDiv = document.createElement('div');
+    messageDiv.className = `fixed top-4 right-4 px-4 py-2 rounded-md z-50 ${
+        type === 'success' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+    }`;
+    messageDiv.textContent = message;
+    
+    document.body.appendChild(messageDiv);
+    
+    // Remove after 3 seconds
+    setTimeout(() => {
+        document.body.removeChild(messageDiv);
+    }, 3000);
+}
+</script>
+{% endblock %}

@@ -1,0 +1,363 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes">
+    <meta name="theme-color" content="#3b82f6">
+    <meta name="mobile-web-app-capable" content="yes">
+    <title>{% block title %}VoiceScript Collector{% endblock %}</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        /* Mobile-first responsive design */
+        html {
+            font-size: 16px;
+            -webkit-text-size-adjust: 100%;
+        }
+        
+        /* Smooth transitions */
+        * {
+            -webkit-tap-highlight-color: rgba(59, 130, 246, 0.2);
+        }
+        
+        .flash-message {
+            animation: slideInDown 0.5s ease-out;
+        }
+        @keyframes slideInDown {
+            from { transform: translateY(-100%); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
+        }
+        
+        /* Mobile-friendly buttons - larger touch targets */
+        button, a[href], [role="button"] {
+            transition: all 0.2s ease;
+            cursor: pointer;
+            min-height: 44px;
+            min-width: 44px;
+        }
+        
+        button:hover, a[href]:hover, [role="button"]:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+        }
+        
+        button:active, a[href]:active, [role="button"]:active {
+            transform: translateY(0);
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+        
+        /* Mobile menu transitions */
+        .mobile-menu {
+            max-height: 0;
+            transform: scaleY(0);
+            transform-origin: top;
+            opacity: 0;
+            overflow: hidden;
+            transition: max-height 0.3s ease-in-out, transform 0.3s ease-in-out, opacity 0.2s ease-in-out;
+        }
+        
+        .mobile-menu.active {
+            max-height: 1000px;
+            transform: scaleY(1);
+            opacity: 1;
+        }
+        
+        /* Hamburger menu animation */
+        .hamburger span {
+            display: block;
+            width: 25px;
+            height: 3px;
+            background-color: #374151;
+            margin: 5px 0;
+            transition: 0.3s;
+        }
+        
+        .hamburger.active span:nth-child(1) {
+            transform: rotate(-45deg) translate(-5px, 6px);
+        }
+        
+        .hamburger.active span:nth-child(2) {
+            opacity: 0;
+        }
+        
+        .hamburger.active span:nth-child(3) {
+            transform: rotate(45deg) translate(-5px, -6px);
+        }
+        
+        /* Focus styles for accessibility */
+        button:focus, a[href]:focus, [role="button"]:focus, input:focus, select:focus, textarea:focus {
+            outline: 2px solid #3b82f6 !important;
+            outline-offset: 2px !important;
+        }
+        
+        /* Mobile-friendly tables */
+        @media (max-width: 768px) {
+            table {
+                font-size: 14px;
+            }
+            
+            th, td {
+                padding: 8px 4px !important;
+            }
+        }
+        
+        /* Touch-friendly spacing */
+        @media (max-width: 640px) {
+            .touch-target {
+                padding: 12px 16px;
+            }
+        }
+    </style>
+</head>
+<body class="bg-gray-50 min-h-screen">
+    <!-- Navigation -->
+    {% if session.user_id %}
+    <nav class="bg-white shadow-sm border-b sticky top-0 z-40">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between h-16">
+                <!-- Logo/Title -->
+                <div class="flex items-center">
+                    <h1 class="text-lg sm:text-xl font-semibold text-gray-900">VoiceScript Collector</h1>
+                </div>
+                
+                <!-- Desktop Navigation -->
+                <div class="hidden md:flex items-center space-x-2 lg:space-x-4">
+                    {% if session.user_role == 'admin' %}
+                        <a href="{{ url_for('admin_dashboard') }}" class="text-gray-700 hover:text-blue-600 px-2 lg:px-3 py-2 rounded-md text-sm font-medium whitespace-nowrap">
+                            <i class="fas fa-tachometer-alt mr-1"></i> <span class="hidden lg:inline">Admin</span>
+                        </a>
+                        <a href="{{ url_for('admin_languages') }}" class="text-gray-700 hover:text-blue-600 px-2 lg:px-3 py-2 rounded-md text-sm font-medium whitespace-nowrap">
+                            <i class="fas fa-language mr-1"></i> <span class="hidden lg:inline">Languages</span>
+                        </a>
+                        <a href="{{ url_for('admin_scripts') }}" class="text-gray-700 hover:text-blue-600 px-2 lg:px-3 py-2 rounded-md text-sm font-medium whitespace-nowrap">
+                            <i class="fas fa-file-text mr-1"></i> <span class="hidden lg:inline">Scripts</span>
+                        </a>
+                        <a href="{{ url_for('admin_data_export') }}" class="text-gray-700 hover:text-blue-600 px-2 lg:px-3 py-2 rounded-md text-sm font-medium whitespace-nowrap">
+                            <i class="fas fa-download mr-1"></i> <span class="hidden lg:inline">Export</span>
+                        </a>
+                    {% endif %}
+                    
+                    {% if session.user_role in ['reviewer', 'admin'] %}
+                        <a href="{{ url_for('reviews') }}" class="text-gray-700 hover:text-blue-600 px-2 lg:px-3 py-2 rounded-md text-sm font-medium whitespace-nowrap">
+                            <i class="fas fa-check-circle mr-1"></i> <span class="hidden lg:inline">Reviews</span>
+                        </a>
+                    {% endif %}
+                    
+                    <a href="{{ url_for('provider_dashboard') }}" class="text-gray-700 hover:text-blue-600 px-2 lg:px-3 py-2 rounded-md text-sm font-medium whitespace-nowrap">
+                        <i class="fas fa-home mr-1"></i> <span class="hidden lg:inline">Dashboard</span>
+                    </a>
+                    
+                    <a href="{{ url_for('record_list') }}" class="text-gray-700 hover:text-blue-600 px-2 lg:px-3 py-2 rounded-md text-sm font-medium whitespace-nowrap">
+                        <i class="fas fa-microphone mr-1"></i> <span class="hidden lg:inline">Record</span>
+                    </a>
+                    
+                    {% if global_show_earnings %}
+                    <a href="{{ url_for('earnings_dashboard') }}" class="text-gray-700 hover:text-blue-600 px-2 lg:px-3 py-2 rounded-md text-sm font-medium whitespace-nowrap">
+                        <i class="fas fa-wallet mr-1"></i> <span class="hidden lg:inline">Earnings</span>
+                    </a>
+                    {% endif %}
+                    
+                    <div class="flex items-center space-x-2 border-l pl-2 lg:pl-4 ml-2 lg:ml-4">
+                        <span class="text-gray-600 text-sm hidden lg:inline">{{ session.user_name }}</span>
+                        <a href="{{ url_for('logout') }}" class="bg-red-600 text-white px-3 py-2 rounded-md text-sm font-medium hover:bg-red-700">
+                            <i class="fas fa-sign-out-alt"></i> <span class="hidden lg:inline ml-1">Logout</span>
+                        </a>
+                    </div>
+                </div>
+                
+                <!-- Mobile Hamburger Button -->
+                <div class="flex md:hidden items-center">
+                    <button id="mobileMenuButton" class="hamburger p-2 rounded-md hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            aria-controls="mobileMenu" aria-expanded="false" aria-label="Toggle navigation menu">
+                        <span></span>
+                        <span></span>
+                        <span></span>
+                    </button>
+                </div>
+            </div>
+            
+            <!-- Mobile Menu -->
+            <div id="mobileMenu" class="mobile-menu md:hidden border-t border-gray-200">
+                <div class="py-2 space-y-1">
+                    <a href="{{ url_for('provider_dashboard') }}" class="block px-4 py-3 text-gray-700 hover:bg-blue-50 hover:text-blue-600 rounded-md">
+                        <i class="fas fa-home mr-2 w-6"></i> Dashboard
+                    </a>
+                    
+                    <a href="{{ url_for('record_list') }}" class="block px-4 py-3 text-gray-700 hover:bg-blue-50 hover:text-blue-600 rounded-md">
+                        <i class="fas fa-microphone mr-2 w-6"></i> Record
+                    </a>
+                    
+                    {% if global_show_earnings %}
+                    <a href="{{ url_for('earnings_dashboard') }}" class="block px-4 py-3 text-gray-700 hover:bg-blue-50 hover:text-blue-600 rounded-md">
+                        <i class="fas fa-wallet mr-2 w-6"></i> Earnings
+                    </a>
+                    {% endif %}
+                    
+                    {% if session.user_role in ['reviewer', 'admin'] %}
+                    <a href="{{ url_for('reviews') }}" class="block px-4 py-3 text-gray-700 hover:bg-blue-50 hover:text-blue-600 rounded-md">
+                        <i class="fas fa-check-circle mr-2 w-6"></i> Reviews
+                    </a>
+                    {% endif %}
+                    
+                    {% if session.user_role == 'admin' %}
+                    <div class="border-t border-gray-200 mt-2 pt-2">
+                        <div class="px-4 py-2 text-xs font-semibold text-gray-500 uppercase">Admin</div>
+                        <a href="{{ url_for('admin_dashboard') }}" class="block px-4 py-3 text-gray-700 hover:bg-blue-50 hover:text-blue-600 rounded-md">
+                            <i class="fas fa-tachometer-alt mr-2 w-6"></i> Admin Dashboard
+                        </a>
+                        <a href="{{ url_for('admin_languages') }}" class="block px-4 py-3 text-gray-700 hover:bg-blue-50 hover:text-blue-600 rounded-md">
+                            <i class="fas fa-language mr-2 w-6"></i> Languages & Pricing
+                        </a>
+                        <a href="{{ url_for('admin_scripts') }}" class="block px-4 py-3 text-gray-700 hover:bg-blue-50 hover:text-blue-600 rounded-md">
+                            <i class="fas fa-file-text mr-2 w-6"></i> Scripts
+                        </a>
+                        <a href="{{ url_for('admin_data_export') }}" class="block px-4 py-3 text-gray-700 hover:bg-blue-50 hover:text-blue-600 rounded-md">
+                            <i class="fas fa-download mr-2 w-6"></i> Data Export
+                        </a>
+                    </div>
+                    {% endif %}
+                    
+                    <div class="border-t border-gray-200 mt-2 pt-2">
+                        <div class="px-4 py-2 text-sm text-gray-600">
+                            <i class="fas fa-user mr-2"></i> {{ session.user_name }}
+                        </div>
+                        <a href="{{ url_for('logout') }}" class="block px-4 py-3 text-red-600 hover:bg-red-50 rounded-md font-medium">
+                            <i class="fas fa-sign-out-alt mr-2 w-6"></i> Logout
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </nav>
+    {% endif %}
+
+    <!-- Flash Messages - Mobile Optimized -->
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            <div class="fixed top-4 left-4 right-4 sm:left-auto sm:right-4 sm:w-96 z-50 space-y-2">
+                {% for category, message in messages %}
+                    <div class="flash-message px-4 py-3 rounded-md shadow-lg {% if category == 'error' %}bg-red-100 text-red-700 border border-red-300{% elif category == 'success' %}bg-green-100 text-green-700 border border-green-300{% else %}bg-blue-100 text-blue-700 border border-blue-300{% endif %}">
+                        <div class="flex items-start">
+                            <div class="flex-shrink-0">
+                                {% if category == 'error' %}
+                                    <i class="fas fa-exclamation-circle"></i>
+                                {% elif category == 'success' %}
+                                    <i class="fas fa-check-circle"></i>
+                                {% else %}
+                                    <i class="fas fa-info-circle"></i>
+                                {% endif %}
+                            </div>
+                            <div class="ml-3 flex-1">
+                                <p class="text-sm">{{ message }}</p>
+                            </div>
+                        </div>
+                    </div>
+                {% endfor %}
+            </div>
+        {% endif %}
+    {% endwith %}
+
+    <!-- Main Content -->
+    <main class="pb-16 sm:pb-8">
+        {% block content %}{% endblock %}
+    </main>
+
+    <script>
+        // Mobile menu toggle with improved state management
+        document.addEventListener('DOMContentLoaded', function() {
+            const menuButton = document.getElementById('mobileMenuButton');
+            const mobileMenu = document.getElementById('mobileMenu');
+            
+            if (menuButton && mobileMenu) {
+                // Toggle menu function
+                function toggleMenu(shouldClose = null) {
+                    const isOpen = mobileMenu.classList.contains('active');
+                    const shouldOpen = shouldClose === null ? !isOpen : !shouldClose;
+                    
+                    if (shouldOpen) {
+                        menuButton.classList.add('active');
+                        mobileMenu.classList.add('active');
+                        menuButton.setAttribute('aria-expanded', 'true');
+                    } else {
+                        menuButton.classList.remove('active');
+                        mobileMenu.classList.remove('active');
+                        menuButton.setAttribute('aria-expanded', 'false');
+                    }
+                }
+                
+                // Toggle on button click
+                menuButton.addEventListener('click', function(e) {
+                    e.stopPropagation();
+                    toggleMenu();
+                });
+                
+                // Close menu when clicking a link
+                const menuLinks = mobileMenu.querySelectorAll('a');
+                menuLinks.forEach(link => {
+                    link.addEventListener('click', function() {
+                        toggleMenu(true); // Close menu
+                    });
+                });
+                
+                // Close menu when clicking outside
+                document.addEventListener('click', function(event) {
+                    if (!menuButton.contains(event.target) && !mobileMenu.contains(event.target)) {
+                        toggleMenu(true); // Close menu
+                    }
+                });
+                
+                // Close menu on ESC key
+                document.addEventListener('keydown', function(event) {
+                    if (event.key === 'Escape' && mobileMenu.classList.contains('active')) {
+                        toggleMenu(true); // Close menu
+                        menuButton.focus(); // Return focus to button
+                    }
+                });
+            }
+        });
+    
+        // Auto-hide flash messages
+        setTimeout(() => {
+            const flashMessages = document.querySelectorAll('.flash-message');
+            flashMessages.forEach(msg => {
+                msg.style.animation = 'slideInDown 0.5s ease-out reverse';
+                setTimeout(() => msg.remove(), 500);
+            });
+        }, 5000);
+
+        // Form submission loading states
+        document.addEventListener('DOMContentLoaded', function() {
+            const forms = document.querySelectorAll('form');
+            forms.forEach(form => {
+                form.addEventListener('submit', function(e) {
+                    const submitButton = form.querySelector('button[type="submit"], input[type="submit"]');
+                    if (submitButton && !submitButton.disabled) {
+                        const originalText = submitButton.innerHTML || submitButton.value;
+                        const isInput = submitButton.tagName === 'INPUT';
+                        
+                        // Show loading state
+                        if (isInput) {
+                            submitButton.value = 'Processing...';
+                        } else {
+                            submitButton.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Processing...';
+                        }
+                        submitButton.disabled = true;
+                        submitButton.style.opacity = '0.7';
+                        
+                        // Reset after 3 seconds (fallback)
+                        setTimeout(() => {
+                            if (isInput) {
+                                submitButton.value = originalText;
+                            } else {
+                                submitButton.innerHTML = originalText;
+                            }
+                            submitButton.disabled = false;
+                            submitButton.style.opacity = '1';
+                        }, 3000);
+                    }
+                });
+            });
+        });
+    </script>
+</body>
+</html>

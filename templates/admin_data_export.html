@@ -1,0 +1,157 @@
+{% extends "base.html" %}
+
+{% block title %}Data Export - VoiceScript Collector{% endblock %}
+
+{% block content %}
+<div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <div class="bg-white rounded-lg shadow-sm p-6 mb-8">
+        <div class="flex items-center justify-between">
+            <div>
+                <h1 class="text-2xl font-bold text-gray-900">Data Export & Management</h1>
+                <p class="text-gray-600 mt-1">View and export all recordings with metadata for ML training</p>
+            </div>
+            <div class="flex space-x-3">
+                <a href="{{ url_for('export_data_csv') }}" class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-green-600 hover:bg-green-700">
+                    <i class="fas fa-download mr-2"></i>
+                    Export CSV
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <div class="bg-white rounded-lg shadow-sm mb-4 p-4">
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div class="bg-blue-50 p-4 rounded-lg">
+                <p class="text-sm text-blue-600 font-medium">Total Recordings</p>
+                <p class="text-2xl font-bold text-blue-900">{{ total_count }}</p>
+            </div>
+            <div class="bg-green-50 p-4 rounded-lg">
+                <p class="text-sm text-green-600 font-medium">Approved</p>
+                <p class="text-2xl font-bold text-green-900">{{ export_data|selectattr('submission.status', 'equalto', 'approved')|list|length }}</p>
+            </div>
+            <div class="bg-purple-50 p-4 rounded-lg">
+                <p class="text-sm text-purple-600 font-medium">Field Collected</p>
+                <p class="text-2xl font-bold text-purple-900">{{ export_data|selectattr('submission.is_field_collection', 'equalto', True)|list|length }}</p>
+            </div>
+            <div class="bg-orange-50 p-4 rounded-lg">
+                <p class="text-sm text-orange-600 font-medium">User Submitted</p>
+                <p class="text-2xl font-bold text-orange-900">{{ export_data|selectattr('submission.is_field_collection', 'equalto', False)|list|length }}</p>
+            </div>
+        </div>
+    </div>
+
+    <div class="bg-white rounded-lg shadow-sm">
+        <div class="px-6 py-4 border-b border-gray-200">
+            <h2 class="text-lg font-semibold text-gray-900">All Recordings ({{ total_count }})</h2>
+        </div>
+        
+        <div class="overflow-x-auto">
+            <table class="min-w-full divide-y divide-gray-200">
+                <thead class="bg-gray-50">
+                    <tr>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">ID</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Audio File</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Script</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Speaker</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Demographics</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Type</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Date</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
+                    </tr>
+                </thead>
+                <tbody class="bg-white divide-y divide-gray-200">
+                    {% for item in export_data %}
+                    <tr class="hover:bg-gray-50">
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{{ item.submission.id }}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm">
+                            {% if item.submission.audio_filename %}
+                                <code class="text-xs bg-gray-100 px-2 py-1 rounded">{{ item.submission.audio_filename[:20] }}...</code>
+                            {% else %}
+                                <span class="text-gray-400">No audio</span>
+                            {% endif %}
+                        </td>
+                        <td class="px-6 py-4 text-sm text-gray-500">
+                            <div class="max-w-xs truncate" title="{{ item.script_content }}">
+                                {{ item.script_content[:50] }}{% if item.script_content|length > 50 %}...{% endif %}
+                            </div>
+                            <span class="text-xs text-gray-400">{{ item.script_language }}</span>
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm">
+                            <div class="font-medium text-gray-900">{{ item.speaker_name }}</div>
+                            {% if item.submission.speaker_location %}
+                                <div class="text-xs text-gray-500">{{ item.submission.speaker_location }}</div>
+                            {% endif %}
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                            <div>{{ item.submission.provider_gender or '-' }}</div>
+                            <div class="text-xs">{{ item.submission.provider_age_group or '-' }}</div>
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm">
+                            {% if item.submission.is_field_collection %}
+                                <span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-purple-100 text-purple-800">
+                                    Field
+                                </span>
+                            {% else %}
+                                <span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-blue-100 text-blue-800">
+                                    User
+                                </span>
+                            {% endif %}
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm">
+                            <span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full 
+                                {% if item.submission.status == 'approved' %}bg-green-100 text-green-800
+                                {% elif item.submission.status == 'rejected' %}bg-red-100 text-red-800
+                                {% else %}bg-yellow-100 text-yellow-800{% endif %}">
+                                {{ item.submission.status }}
+                            </span>
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                            {{ item.submission.created_at.strftime('%Y-%m-%d') if item.submission.created_at else '-' }}
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm space-x-3">
+                            {% if item.submission.audio_filename %}
+                                <a href="/uploads/{{ item.submission.audio_filename }}" target="_blank" class="text-blue-600 hover:text-blue-900">
+                                    <i class="fas fa-play-circle"></i> Play
+                                </a>
+                            {% endif %}
+                            <button onclick="deleteRecording({{ item.submission.id }})" class="text-red-600 hover:text-red-900" title="Delete recording">
+                                <i class="fas fa-trash"></i> Delete
+                            </button>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<script>
+function deleteRecording(submissionId) {
+    if (!confirm('Are you sure you want to delete this recording? This action cannot be undone.')) {
+        return;
+    }
+    
+    fetch(`/api/submissions/${submissionId}`, {
+        method: 'DELETE',
+        headers: {
+            'Content-Type': 'application/json'
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            alert('Recording deleted successfully!');
+            window.location.reload();
+        } else {
+            alert('Error deleting recording: ' + (data.error || 'Unknown error'));
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('Error deleting recording. Please try again.');
+    });
+}
+</script>
+{% endblock %}

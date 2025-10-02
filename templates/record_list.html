@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+
+{% block title %}Available Scripts - VoiceScript Collector{% endblock %}
+
+{% block content %}
+<div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <div class="mb-8">
+        <h1 class="text-3xl font-bold text-gray-900">Available Recording Scripts</h1>
+        <p class="text-gray-600 mt-2">Choose from curated prompts designed to collect high-quality voice and text data for NLP training.</p>
+    </div>
+
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
+        {% for script in scripts %}
+        <div class="bg-white rounded-lg shadow-sm p-6 hover:shadow-md transition-shadow">
+            <div class="flex items-start justify-between mb-4">
+                <div class="flex-1">
+                    <h3 class="text-lg font-semibold text-gray-900 mb-2">{{ script.title }}</h3>
+                    <div class="flex items-center space-x-4 text-sm text-gray-500 mb-3">
+                        <span class="inline-flex items-center">
+                            <i class="fas fa-layer-group mr-1"></i>
+                            {{ script.category.title() if script.category }}
+                        </span>
+                        <span class="inline-flex items-center">
+                            <i class="fas fa-signal mr-1"></i>
+                            {{ script.difficulty.title() if script.difficulty }}
+                        </span>
+                    </div>
+                </div>
+            </div>
+            
+            <p class="text-gray-600 mb-4 line-clamp-3">{{ script.content }}</p>
+            
+            <div class="flex items-center justify-between pt-4 border-t border-gray-200">
+                <div class="flex items-center space-x-4 text-sm text-gray-500">
+                    {% if script.target_duration %}
+                    <span class="inline-flex items-center">
+                        <i class="fas fa-clock mr-1"></i>
+                        {{ (script.target_duration / 60) | round(1) }}min
+                    </span>
+                    {% endif %}
+                    {% if script.word_count %}
+                    <span class="inline-flex items-center">
+                        <i class="fas fa-file-word mr-1"></i>
+                        ~{{ script.word_count }} words
+                    </span>
+                    {% endif %}
+                </div>
+                <a href="{{ url_for('record_script', script_id=script.id) }}" 
+                   class="inline-flex items-center px-3 py-2 border border-transparent text-sm leading-4 font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700">
+                    <i class="fas fa-microphone mr-1"></i>
+                    Record
+                </a>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+
+    <!-- Custom Content Option -->
+    <div class="bg-gradient-to-r from-green-50 to-blue-50 rounded-lg p-6">
+        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <div class="flex-1">
+                <h3 class="text-lg font-semibold text-gray-900 mb-2">
+                    <i class="fas fa-edit text-green-600 mr-2"></i>
+                    Create Custom Content
+                </h3>
+                <p class="text-gray-600">Have your own content to contribute? Submit custom text with optional audio recordings.</p>
+            </div>
+            <a href="{{ url_for('record_script', script_id=0) }}" 
+               class="inline-flex items-center justify-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-green-600 hover:bg-green-700 whitespace-nowrap">
+                <i class="fas fa-plus mr-2"></i>
+                Create Custom
+            </a>
+        </div>
+    </div>
+</div>
+
+<style>
+.line-clamp-3 {
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+</style>
+{% endblock %}

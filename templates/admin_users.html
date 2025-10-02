@@ -1,0 +1,325 @@
+{% extends "base.html" %}
+
+{% block title %}User Management - VoiceScript Collector{% endblock %}
+
+{% block content %}
+<div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <div class="bg-white rounded-lg shadow-sm p-6 mb-8">
+        <div class="flex items-center justify-between">
+            <div>
+                <h1 class="text-2xl font-bold text-gray-900">User Management</h1>
+                <p class="text-gray-600 mt-1">Manage user accounts and role assignments</p>
+            </div>
+            <button onclick="showAddUserModal()" class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700">
+                <i class="fas fa-plus mr-2"></i>
+                Add New User
+            </button>
+        </div>
+    </div>
+
+    <div class="bg-white rounded-lg shadow-sm">
+        <div class="px-6 py-4 border-b border-gray-200">
+            <h2 class="text-lg font-semibold text-gray-900">Platform Users ({{ users|length }})</h2>
+        </div>
+        
+        <div class="overflow-x-auto">
+            <table class="min-w-full divide-y divide-gray-200">
+                <thead class="bg-gray-50">
+                    <tr>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">User</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Email</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Gender</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Age Group</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Role</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Created</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                    </tr>
+                </thead>
+                <tbody class="bg-white divide-y divide-gray-200">
+                    {% for user in users %}
+                    <tr>
+                        <td class="px-6 py-4 whitespace-nowrap">
+                            <div class="text-sm font-medium text-gray-900">{{ user.first_name }} {{ user.last_name }}</div>
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ user.email }}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ user.gender or 'Not specified' }}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ user.age_group or 'Not specified' }}</td>
+                        <td class="px-6 py-4 whitespace-nowrap">
+                            <select onchange="updateUserRole({{ user.id }}, this.value)" class="text-sm border border-gray-300 rounded px-2 py-1 {% if user.role == 'admin' %}bg-red-50 text-red-800{% elif user.role == 'reviewer' %}bg-blue-50 text-blue-800{% else %}bg-green-50 text-green-800{% endif %}">
+                                <option value="provider" {% if user.role == 'provider' %}selected{% endif %}>Provider</option>
+                                <option value="reviewer" {% if user.role == 'reviewer' %}selected{% endif %}>Reviewer</option>
+                                <option value="admin" {% if user.role == 'admin' %}selected{% endif %}>Admin</option>
+                            </select>
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                            {{ user.created_at.strftime('%Y-%m-%d') if user.created_at else 'N/A' }}
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                            <button data-user-id="{{ user.id }}" 
+                                    data-first-name="{{ user.first_name }}" 
+                                    data-last-name="{{ user.last_name }}" 
+                                    data-email="{{ user.email }}" 
+                                    data-gender="{{ user.gender or '' }}" 
+                                    data-age-group="{{ user.age_group or '' }}"
+                                    onclick="editUserFromData(this)" class="text-blue-600 hover:text-blue-900 mr-3">Edit</button>
+                            <button onclick="deleteUser({{ user.id }})" class="text-red-600 hover:text-red-900">Delete</button>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- Add User Modal -->
+<div id="addUserModal" class="fixed inset-0 bg-gray-600 bg-opacity-50 hidden items-center justify-center">
+    <div class="bg-white rounded-lg shadow-xl p-6 w-full max-w-md">
+        <h3 class="text-lg font-semibold text-gray-900 mb-4">Add New User</h3>
+        <form id="addUserForm">
+            <div class="mb-4">
+                <label class="block text-sm font-medium text-gray-700 mb-2">Email</label>
+                <input type="email" name="email" required class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500">
+            </div>
+            <div class="mb-4">
+                <label class="block text-sm font-medium text-gray-700 mb-2">First Name</label>
+                <input type="text" name="first_name" required class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500">
+            </div>
+            <div class="mb-4">
+                <label class="block text-sm font-medium text-gray-700 mb-2">Last Name</label>
+                <input type="text" name="last_name" required class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500">
+            </div>
+            <div class="mb-4">
+                <label class="block text-sm font-medium text-gray-700 mb-2">Password</label>
+                <input type="password" name="password" required class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500" placeholder="Enter password for new user">
+            </div>
+            <div class="mb-4">
+                <label class="block text-sm font-medium text-gray-700 mb-2">Gender</label>
+                <select name="gender" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500">
+                    <option value="">Prefer not to say</option>
+                    <option value="male">Male</option>
+                    <option value="female">Female</option>
+                    <option value="non-binary">Non-binary</option>
+                    <option value="prefer-not-to-say">Prefer not to say</option>
+                </select>
+            </div>
+            <div class="mb-4">
+                <label class="block text-sm font-medium text-gray-700 mb-2">Age Group</label>
+                <select name="age_group" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500">
+                    <option value="">Select age group</option>
+                    <option value="Child (0–12)">Child (0–12)</option>
+                    <option value="Teen (13–19)">Teen (13–19)</option>
+                    <option value="Adult (20–59)">Adult (20–59)</option>
+                    <option value="Elderly (60+)">Elderly (60+)</option>
+                </select>
+            </div>
+            <div class="mb-6">
+                <label class="block text-sm font-medium text-gray-700 mb-2">Role</label>
+                <select name="role" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500">
+                    <option value="provider">Provider</option>
+                    <option value="reviewer">Reviewer</option>
+                    <option value="admin">Admin</option>
+                </select>
+            </div>
+            <div class="flex justify-end space-x-3">
+                <button type="button" onclick="hideAddUserModal()" class="px-4 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50">Cancel</button>
+                <button type="submit" class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700">Add User</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+function showAddUserModal() {
+    document.getElementById('addUserModal').classList.remove('hidden');
+    document.getElementById('addUserModal').classList.add('flex');
+}
+
+function hideAddUserModal() {
+    document.getElementById('addUserModal').classList.add('hidden');
+    document.getElementById('addUserModal').classList.remove('flex');
+}
+
+function editUserFromData(button) {
+    const userId = button.dataset.userId;
+    const firstName = button.dataset.firstName;
+    const lastName = button.dataset.lastName;
+    const email = button.dataset.email;
+    const gender = button.dataset.gender;
+    const ageGroup = button.dataset.ageGroup;
+    
+    editUser(userId, firstName, lastName, email, gender, ageGroup);
+}
+
+function updateUserRole(userId, newRole) {
+    fetch(`/api/users/${userId}/role`, {
+        method: 'PUT',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ role: newRole })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            location.reload();
+        } else {
+            alert('Error updating user role: ' + (data.error || 'Unknown error'));
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('Error updating user role');
+    });
+}
+
+function editUser(userId, firstName, lastName, email, gender, ageGroup) {
+    // Create and show edit modal
+    const modal = document.createElement('div');
+    modal.id = 'editUserModal';
+    modal.className = 'fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center';
+    modal.innerHTML = `
+        <div class="bg-white rounded-lg shadow-xl p-6 w-full max-w-md">
+            <h3 class="text-lg font-semibold text-gray-900 mb-4">Edit User</h3>
+            <form id="editUserForm">
+                <div class="mb-4">
+                    <label class="block text-sm font-medium text-gray-700 mb-2">First Name</label>
+                    <input type="text" name="first_name" required value="${firstName}" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500">
+                </div>
+                <div class="mb-4">
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Last Name</label>
+                    <input type="text" name="last_name" required value="${lastName}" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500">
+                </div>
+                <div class="mb-4">
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Email</label>
+                    <input type="email" name="email" required value="${email}" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500">
+                </div>
+                <div class="mb-4">
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Gender</label>
+                    <select name="gender" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500">
+                        <option value="" ${gender === '' ? 'selected' : ''}>Prefer not to say</option>
+                        <option value="male" ${gender === 'male' ? 'selected' : ''}>Male</option>
+                        <option value="female" ${gender === 'female' ? 'selected' : ''}>Female</option>
+                        <option value="non-binary" ${gender === 'non-binary' ? 'selected' : ''}>Non-binary</option>
+                        <option value="prefer-not-to-say" ${gender === 'prefer-not-to-say' ? 'selected' : ''}>Prefer not to say</option>
+                    </select>
+                </div>
+                <div class="mb-6">
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Age Group</label>
+                    <select name="age_group" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500">
+                        <option value="" ${ageGroup === '' ? 'selected' : ''}>Select age group</option>
+                        <option value="Child (0–12)" ${ageGroup === 'Child (0–12)' ? 'selected' : ''}>Child (0–12)</option>
+                        <option value="Teen (13–19)" ${ageGroup === 'Teen (13–19)' ? 'selected' : ''}>Teen (13–19)</option>
+                        <option value="Adult (20–59)" ${ageGroup === 'Adult (20–59)' ? 'selected' : ''}>Adult (20–59)</option>
+                        <option value="Elderly (60+)" ${ageGroup === 'Elderly (60+)' ? 'selected' : ''}>Elderly (60+)</option>
+                    </select>
+                </div>
+                <div class="flex justify-end space-x-3">
+                    <button type="button" onclick="hideEditUserModal()" class="px-4 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50">Cancel</button>
+                    <button type="submit" class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700">Update User</button>
+                </div>
+            </form>
+        </div>
+    `;
+    
+    document.body.appendChild(modal);
+    
+    document.getElementById('editUserForm').addEventListener('submit', function(e) {
+        e.preventDefault();
+        
+        const formData = new FormData(this);
+        const updateData = {
+            first_name: formData.get('first_name'),
+            last_name: formData.get('last_name'),
+            email: formData.get('email'),
+            gender: formData.get('gender'),
+            age_group: formData.get('age_group')
+        };
+        
+        fetch(`/api/users/${userId}`, {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(updateData)
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                hideEditUserModal();
+                location.reload();
+            } else {
+                alert('Error updating user: ' + (data.error || 'Unknown error'));
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('Error updating user');
+        });
+    });
+}
+
+function hideEditUserModal() {
+    const modal = document.getElementById('editUserModal');
+    if (modal) {
+        modal.remove();
+    }
+}
+
+function deleteUser(userId) {
+    if (confirm('Are you sure you want to delete this user? This action cannot be undone.')) {
+        fetch(`/api/users/${userId}`, {
+            method: 'DELETE'
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                location.reload();
+            } else {
+                alert('Error deleting user: ' + (data.error || 'Unknown error'));
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('Error deleting user');
+        });
+    }
+}
+
+document.getElementById('addUserForm').addEventListener('submit', function(e) {
+    e.preventDefault();
+    
+    const formData = new FormData(this);
+    const userData = {
+        email: formData.get('email'),
+        first_name: formData.get('first_name'),
+        last_name: formData.get('last_name'),
+        password: formData.get('password'),
+        role: formData.get('role'),
+        gender: formData.get('gender'),
+        age_group: formData.get('age_group')
+    };
+    
+    fetch('/api/users', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(userData)
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            hideAddUserModal();
+            location.reload();
+        } else {
+            alert('Error creating user: ' + (data.error || 'Unknown error'));
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('Error creating user');
+    });
+});
+</script>
+{% endblock %}

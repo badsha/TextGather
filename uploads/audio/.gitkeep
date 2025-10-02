@@ -1,0 +1,2 @@
+# This file ensures the uploads/audio directory is created
+# Audio files will be stored here during application runtime

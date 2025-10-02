@@ -1,0 +1,308 @@
+{% extends "base.html" %}
+
+{% block title %}Recording Queue - VoiceScript Collector{% endblock %}
+
+{% block content %}
+<div class="min-h-screen bg-gray-50">
+    <!-- Header with user info -->
+    <div class="bg-white shadow-sm">
+        <div class="max-w-4xl mx-auto px-6 py-4">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center space-x-4">
+                    <h1 class="text-2xl font-bold text-gray-900">Recording Queue</h1>
+                    <div class="bg-blue-100 text-blue-800 px-3 py-1 rounded-full text-sm font-medium">
+                        {{ user.gender.title() }} • {{ user.age_group.replace('_', ' ').title() }}
+                    </div>
+                </div>
+                <div class="flex items-center space-x-4">
+                    <select id="languageSelector" class="px-3 py-2 border border-gray-300 rounded-md">
+                        {% for language in languages %}
+                        <option value="{{ language.code }}" {% if language.code == 'en' %}selected{% endif %}>
+                            {{ language.name }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                    <span id="progressIndicator" class="text-sm text-gray-600">Loading...</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main recording interface -->
+    <div class="max-w-4xl mx-auto px-6 py-8">
+        <div id="loadingState" class="text-center py-12">
+            <div class="text-lg text-gray-600">Loading next script...</div>
+        </div>
+
+        <div id="noTasksState" class="text-center py-12 hidden">
+            <div class="text-lg text-gray-600 mb-4">Great job! No more scripts available for your demographic.</div>
+            <a href="{{ url_for('provider_dashboard') }}" class="text-blue-600 hover:text-blue-800">Return to Dashboard</a>
+        </div>
+
+        <div id="recordingInterface" class="hidden">
+            <!-- Script content -->
+            <div class="bg-white rounded-lg shadow-sm p-8 mb-6">
+                <div class="text-center">
+                    <h2 class="text-lg font-semibold text-gray-800 mb-4">Read this script:</h2>
+                    <div id="scriptContent" class="text-xl leading-relaxed text-gray-900 px-4 py-6 bg-gray-50 rounded-lg"></div>
+                </div>
+            </div>
+
+            <!-- Recording controls -->
+            <div class="bg-white rounded-lg shadow-sm p-8">
+                <div class="text-center space-y-6">
+                    <!-- Recording status -->
+                    <div id="recordingStatus" class="text-lg font-medium text-gray-600">Press SPACEBAR or click to start recording</div>
+
+                    <!-- Big record button -->
+                    <div class="flex justify-center">
+                        <button id="recordButton" 
+                                class="w-32 h-32 rounded-full bg-red-500 hover:bg-red-600 text-white text-2xl font-bold transition-all duration-200 transform hover:scale-105 focus:outline-none focus:ring-4 focus:ring-red-200">
+                            ●
+                        </button>
+                    </div>
+
+                    <!-- Audio playback -->
+                    <div id="audioPlayback" class="hidden">
+                        <audio id="recordedAudio" controls class="mx-auto"></audio>
+                    </div>
+
+                    <!-- Action buttons -->
+                    <div class="flex justify-center space-x-4 pt-6">
+                        <button id="skipButton" 
+                                class="px-6 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                            Skip (S)
+                        </button>
+                        <button id="submitButton" 
+                                class="px-8 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                                disabled>
+                            Submit & Next (Enter)
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Keyboard shortcuts help -->
+            <div class="text-center mt-6 text-sm text-gray-500">
+                <div class="bg-white rounded-lg p-4 shadow-sm">
+                    <strong>Keyboard Shortcuts:</strong> SPACEBAR = Start/Stop Recording • ENTER = Submit & Next • S = Skip
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+class RecordingQueue {
+    constructor() {
+        this.currentScript = null;
+        this.mediaRecorder = null;
+        this.audioChunks = [];
+        this.isRecording = false;
+        this.recordedBlob = null;
+        
+        this.initializeElements();
+        this.setupEventListeners();
+        this.loadNextScript();
+    }
+    
+    initializeElements() {
+        this.loadingState = document.getElementById('loadingState');
+        this.noTasksState = document.getElementById('noTasksState');
+        this.recordingInterface = document.getElementById('recordingInterface');
+        this.scriptContent = document.getElementById('scriptContent');
+        this.recordingStatus = document.getElementById('recordingStatus');
+        this.recordButton = document.getElementById('recordButton');
+        this.audioPlayback = document.getElementById('audioPlayback');
+        this.recordedAudio = document.getElementById('recordedAudio');
+        this.skipButton = document.getElementById('skipButton');
+        this.submitButton = document.getElementById('submitButton');
+        this.languageSelector = document.getElementById('languageSelector');
+        this.progressIndicator = document.getElementById('progressIndicator');
+    }
+    
+    setupEventListeners() {
+        // Record button
+        this.recordButton.addEventListener('click', () => this.toggleRecording());
+        
+        // Action buttons
+        this.skipButton.addEventListener('click', () => this.skipScript());
+        this.submitButton.addEventListener('click', () => this.submitRecording());
+        
+        // Language selector
+        this.languageSelector.addEventListener('change', () => this.loadNextScript());
+        
+        // Keyboard shortcuts
+        document.addEventListener('keydown', (e) => {
+            if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+            
+            switch(e.key) {
+                case ' ': // Spacebar
+                    e.preventDefault();
+                    this.toggleRecording();
+                    break;
+                case 'Enter':
+                    e.preventDefault();
+                    if (!this.submitButton.disabled) {
+                        this.submitRecording();
+                    }
+                    break;
+                case 's':
+                case 'S':
+                    e.preventDefault();
+                    this.skipScript();
+                    break;
+            }
+        });
+    }
+    
+    async loadNextScript() {
+        this.showLoading();
+        
+        try {
+            const language = this.languageSelector.value;
+            const response = await fetch(`/api/recording/next?language=${language}`);
+            const data = await response.json();
+            
+            if (data.has_task) {
+                this.currentScript = data.script;
+                this.showRecordingInterface();
+                this.scriptContent.textContent = data.script.content;
+                this.updateProgress(data.requirement);
+                this.resetRecordingState();
+            } else {
+                this.showNoTasks();
+                this.progressIndicator.textContent = data.message;
+            }
+        } catch (error) {
+            console.error('Error loading next script:', error);
+            this.recordingStatus.textContent = 'Error loading script. Please refresh the page.';
+        }
+    }
+    
+    showLoading() {
+        this.loadingState.classList.remove('hidden');
+        this.noTasksState.classList.add('hidden');
+        this.recordingInterface.classList.add('hidden');
+    }
+    
+    showNoTasks() {
+        this.loadingState.classList.add('hidden');
+        this.noTasksState.classList.remove('hidden');
+        this.recordingInterface.classList.add('hidden');
+    }
+    
+    showRecordingInterface() {
+        this.loadingState.classList.add('hidden');
+        this.noTasksState.classList.add('hidden');
+        this.recordingInterface.classList.remove('hidden');
+    }
+    
+    updateProgress(requirement) {
+        const remaining = requirement.target_total - requirement.current_approved;
+        this.progressIndicator.textContent = `${remaining} more needed for your demographic`;
+    }
+    
+    resetRecordingState() {
+        this.isRecording = false;
+        this.recordedBlob = null;
+        this.audioChunks = [];
+        this.recordButton.textContent = '●';
+        this.recordButton.className = 'w-32 h-32 rounded-full bg-red-500 hover:bg-red-600 text-white text-2xl font-bold transition-all duration-200 transform hover:scale-105 focus:outline-none focus:ring-4 focus:ring-red-200';
+        this.recordingStatus.textContent = 'Press SPACEBAR or click to start recording';
+        this.audioPlayback.classList.add('hidden');
+        this.submitButton.disabled = true;
+    }
+    
+    async toggleRecording() {
+        if (this.isRecording) {
+            this.stopRecording();
+        } else {
+            await this.startRecording();
+        }
+    }
+    
+    async startRecording() {
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            this.mediaRecorder = new MediaRecorder(stream);
+            this.audioChunks = [];
+            
+            this.mediaRecorder.ondataavailable = (event) => {
+                this.audioChunks.push(event.data);
+            };
+            
+            this.mediaRecorder.onstop = () => {
+                const audioBlob = new Blob(this.audioChunks, { type: 'audio/wav' });
+                this.recordedBlob = audioBlob;
+                this.recordedAudio.src = URL.createObjectURL(audioBlob);
+                this.audioPlayback.classList.remove('hidden');
+                this.submitButton.disabled = false;
+            };
+            
+            this.mediaRecorder.start();
+            this.isRecording = true;
+            this.recordButton.textContent = '⏹';
+            this.recordButton.className = 'w-32 h-32 rounded-full bg-gray-500 hover:bg-gray-600 text-white text-2xl font-bold transition-all duration-200 transform hover:scale-105 focus:outline-none focus:ring-4 focus:ring-gray-200';
+            this.recordingStatus.textContent = 'Recording... Press SPACEBAR or click to stop';
+            
+        } catch (error) {
+            console.error('Error starting recording:', error);
+            this.recordingStatus.textContent = 'Error accessing microphone. Please check permissions.';
+        }
+    }
+    
+    stopRecording() {
+        if (this.mediaRecorder && this.isRecording) {
+            this.mediaRecorder.stop();
+            this.mediaRecorder.stream.getTracks().forEach(track => track.stop());
+            this.isRecording = false;
+            this.recordingStatus.textContent = 'Recording complete. Review and submit or record again.';
+        }
+    }
+    
+    skipScript() {
+        if (confirm('Skip this script and move to the next one?')) {
+            this.loadNextScript();
+        }
+    }
+    
+    async submitRecording() {
+        if (!this.recordedBlob || !this.currentScript) return;
+        
+        this.submitButton.disabled = true;
+        this.submitButton.textContent = 'Submitting...';
+        
+        try {
+            const formData = new FormData();
+            formData.append('script_id', this.currentScript.id);
+            formData.append('audio_file', this.recordedBlob, 'recording.wav');
+            
+            const response = await fetch('/submit_recording', {
+                method: 'POST',
+                body: formData
+            });
+            
+            if (response.ok) {
+                // Automatically load next script
+                this.loadNextScript();
+            } else {
+                this.recordingStatus.textContent = 'Error submitting recording. Please try again.';
+                this.submitButton.disabled = false;
+                this.submitButton.textContent = 'Submit & Next (Enter)';
+            }
+        } catch (error) {
+            console.error('Error submitting recording:', error);
+            this.recordingStatus.textContent = 'Error submitting recording. Please try again.';
+            this.submitButton.disabled = false;
+            this.submitButton.textContent = 'Submit & Next (Enter)';
+        }
+    }
+}
+
+// Initialize when page loads
+document.addEventListener('DOMContentLoaded', () => {
+    new RecordingQueue();
+});
+</script>
+{% endblock %}
