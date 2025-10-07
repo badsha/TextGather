@@ -52,6 +52,7 @@
                         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">ID</th>
                         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Audio File</th>
                         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Script</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Transcript</th>
                         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Speaker</th>
                         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Demographics</th>
                         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Type</th>
@@ -76,6 +77,21 @@
                                 {{ item.script_content[:50] }}{% if item.script_content|length > 50 %}...{% endif %}
                             </div>
                             <span class="text-xs text-gray-400">{{ item.script_language }}</span>
+                        </td>
+                        <td class="px-6 py-4 text-sm">
+                            {% if item.submission.transcript %}
+                                <div class="max-w-xs">
+                                    <div class="flex items-center text-blue-600 mb-1">
+                                        <i class="fas fa-closed-captioning text-xs mr-1"></i>
+                                        <span class="text-xs font-medium">Available</span>
+                                    </div>
+                                    <div class="text-xs text-gray-600 italic truncate" title="{{ item.submission.transcript }}">
+                                        "{{ item.submission.transcript[:60] }}{% if item.submission.transcript|length > 60 %}...{% endif %}"
+                                    </div>
+                                </div>
+                            {% else %}
+                                <span class="text-xs text-gray-400">No transcript</span>
+                            {% endif %}
                         </td>
                         <td class="px-6 py-4 whitespace-nowrap text-sm">
                             <div class="font-medium text-gray-900">{{ item.speaker_name }}</div>

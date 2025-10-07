@@ -3,6 +3,7 @@ import logging
 import click
 from flask import Flask, render_template, request, redirect, url_for, flash, session, jsonify, send_from_directory, send_file, abort
 from flask_sqlalchemy import SQLAlchemy
+from flask_migrate import Migrate
 from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
 from authlib.integrations.flask_client import OAuth
@@ -101,6 +102,7 @@ else:
     app.logger.info('VoiceScript Collector startup - Development Mode')
 
 db = SQLAlchemy(app)
+migrate = Migrate(app, db)
 oauth = OAuth(app)
 
 # Configure Google OAuth only if credentials are available
@@ -174,6 +176,7 @@ class Submission(db.Model):
     user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)  # Nullable for field-collected submissions
     script_id = db.Column(db.Integer, db.ForeignKey('scripts.id'), nullable=False)  # Required for script-based recordings
     text_content = db.Column(db.Text)  # Optional text response
+    transcript = db.Column(db.Text)  # Real-time transcription from Web Speech API
     audio_filename = db.Column(db.String(255), nullable=False)  # Audio required for script recordings
     status = db.Column(db.String(20), default='pending')
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
@@ -811,6 +814,7 @@ def admin_scripts():
 def submit_recording():
     script_id = request.form.get('script_id')
     text_content = request.form.get('text_content', '').strip()
+    transcript = request.form.get('transcript', '').strip()
     audio_file = request.files.get('audio_file')
     
     # Validate required fields - for script-based recordings, audio is mandatory
@@ -846,22 +850,28 @@ def submit_recording():
     user = User.query.get(session['user_id'])
     
     # Create new submission with demographic snapshot
-    submission = Submission(
-        user_id=session['user_id'],
-        script_id=int(script_id) if script_id and script_id != '0' else None,
-        text_content=text_content,
-        audio_filename=audio_filename,
-        duration=duration,
-        word_count=word_count,
-        status='pending',
-        provider_gender=user.gender if user else None,  # Snapshot at submission time
-        provider_age_group=user.age_group if user else None  # Snapshot at submission time
-    )
-    
-    db.session.add(submission)
-    db.session.commit()
-    
-    return jsonify({'success': True, 'message': 'Recording submitted successfully!', 'submission_id': submission.id})
+    try:
+        submission = Submission(
+            user_id=session['user_id'],
+            script_id=int(script_id) if script_id and script_id != '0' else None,
+            text_content=text_content,
+            transcript=transcript if transcript else None,
+            audio_filename=audio_filename,
+            duration=duration,
+            word_count=word_count,
+            status='pending',
+            provider_gender=user.gender if user else None,  # Snapshot at submission time
+            provider_age_group=user.age_group if user else None  # Snapshot at submission time
+        )
+        
+        db.session.add(submission)
+        db.session.commit()
+        
+        return jsonify({'success': True, 'message': 'Recording submitted successfully!', 'submission_id': submission.id})
+    except Exception as e:
+        db.session.rollback()
+        app.logger.error(f'Error submitting recording: {str(e)}')
+        return jsonify({'success': False, 'error': 'Failed to save recording. Please try again.'}), 500
 
 # Field Collection Routes for Admins
 @app.route('/admin/field-collect')
@@ -881,6 +891,7 @@ def submit_field_collection():
     # Speaker metadata
     speaker_name = request.form.get('speaker_name', '').strip()
     speaker_location = request.form.get('speaker_location', '').strip()
+    transcript = request.form.get('transcript', '').strip()
     provider_gender = request.form.get('provider_gender')
     provider_age_group = request.form.get('provider_age_group')
     
@@ -913,6 +924,7 @@ def submit_field_collection():
         user_id=None,  # No user for field collections
         script_id=int(script_id),
         text_content='',
+        transcript=transcript if transcript else None,
         audio_filename=audio_filename,
         word_count=word_count,
         status='approved',  # Auto-approve field collections
@@ -1686,6 +1698,7 @@ def get_user_submissions(script_id):
         item = {
             'id': sub.id,
             'text_content': sub.text_content or '',
+            'transcript': sub.transcript or '',
             'audio_filename': sub.audio_filename,
             'audio_url': f'/api/submissions/{sub.id}/audio' if sub.audio_filename else None,
             'status': sub.status,
@@ -1812,7 +1825,7 @@ def export_data_csv():
     
     # Write header
     writer.writerow([
-        'ID', 'Audio Filename', 'Script ID', 'Script Content', 'Language',
+        'ID', 'Audio Filename', 'Script ID', 'Script Content', 'Transcript', 'Language',
         'Speaker Gender', 'Speaker Age Group', 'Speaker Name', 'Speaker Location',
         'Is Field Collection', 'Collected By', 'Status', 'Word Count', 'Created At'
     ])
@@ -1834,6 +1847,7 @@ def export_data_csv():
             sub.audio_filename or '',
             sub.script_id or '',
             script.content if script else '',
+            sub.transcript or '',
             script.language if script else '',
             sub.provider_gender or '',
             sub.provider_age_group or '',
@@ -2278,7 +2292,8 @@ def health_check():
     """Health check endpoint for Docker container monitoring"""
     try:
         # Test database connection
-        db.session.execute(db.text('SELECT 1'))
+        result = db.session.execute(db.text('SELECT 1'))
+        result.fetchone()
         return jsonify({
             'status': 'healthy',
             'database': 'connected',

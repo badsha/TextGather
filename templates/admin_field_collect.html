@@ -325,6 +325,8 @@ class FieldCollectionRecorder {
                         const transcript = event.results[i][0].transcript;
                         if (event.results[i].isFinal) {
                             finalTranscript += transcript + ' ';
+                            // Store the final transcript
+                            this.finalTranscript = finalTranscript.trim();
                         } else {
                             interimTranscript += transcript;
                         }
@@ -411,6 +413,11 @@ class FieldCollectionRecorder {
             }
             if (this.speakerLocation.value.trim()) {
                 formData.append('speaker_location', this.speakerLocation.value.trim());
+            }
+            
+            // Add transcript if available
+            if (this.finalTranscript) {
+                formData.append('transcript', this.finalTranscript);
             }
             
             const response = await fetch('/admin/field-collect/submit', {

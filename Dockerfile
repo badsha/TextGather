@@ -49,10 +49,11 @@ ENV PATH="/opt/venv/bin:$PATH"
 EXPOSE 8000
 
 # Use Gunicorn as the production WSGI server instead of Flask dev server
+# The entrypoint script runs database migrations before starting the server
 # Configuration is in gunicorn.conf.py:
 # --bind 0.0.0.0:8000: Listen on all interfaces on port 8000
 # --workers 4: Use 4 worker processes for better performance
 # --timeout 120: Set request timeout to 2 minutes
 # --access-logfile -: Log access to stdout
 # --error-logfile -: Log errors to stderr
-CMD ["gunicorn", "--config", "gunicorn.conf.py", "app:app"]
+ENTRYPOINT ["/app/docker-entrypoint.sh"]
