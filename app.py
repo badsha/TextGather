@@ -1,20 +1,27 @@
 import os
 import logging
 import click
-from flask import Flask, render_template, request, redirect, url_for, flash, session, jsonify, send_from_directory, send_file, abort
-from flask_sqlalchemy import SQLAlchemy
-from flask_migrate import Migrate
-from werkzeug.security import generate_password_hash, check_password_hash
-from werkzeug.utils import secure_filename
-from authlib.integrations.flask_client import OAuth
 import uuid
-from datetime import datetime
-import secrets
-import functools
-from sqlalchemy import text
 import csv
 import io
 import zipfile
+from flask import Flask, render_template, request, redirect, url_for, flash, session, jsonify, send_from_directory, send_file, abort
+from werkzeug.utils import secure_filename
+from authlib.integrations.flask_client import OAuth
+from datetime import datetime
+from sqlalchemy import text
+
+# Import database and models from models.py
+from models import (
+    db, User, Script, ScriptVariantRequirement, Submission,
+    BillingRecord, Language, PricingRate, AppSettings
+)
+
+# Import utilities from utils.py
+from utils import (
+    get_app_setting, get_show_earnings, set_app_setting,
+    require_auth, require_role, inject_common_variables
+)
 
 app = Flask(__name__)
 
@@ -101,8 +108,9 @@ else:
     logging.basicConfig(level=logging.DEBUG)
     app.logger.info('VoiceScript Collector startup - Development Mode')
 
-db = SQLAlchemy(app)
-migrate = Migrate(app, db)
+# Initialize database with app
+db.init_app(app)
+
 oauth = OAuth(app)
 
 # Configure Google OAuth only if credentials are available
@@ -118,227 +126,8 @@ if app.config['GOOGLE_CLIENT_ID'] and app.config['GOOGLE_CLIENT_SECRET']:
         }
     )
 
-# Database Models
-class User(db.Model):
-    __tablename__ = 'users'
-    
-    id = db.Column(db.Integer, primary_key=True)
-    email = db.Column(db.String(120), unique=True, nullable=False)
-    password_hash = db.Column(db.String(255), nullable=True)  # Made nullable for OAuth users
-    first_name = db.Column(db.String(50), nullable=False)
-    last_name = db.Column(db.String(50), nullable=False)
-    role = db.Column(db.String(20), default='provider')
-    gender = db.Column(db.String(20), nullable=True)  # male, female, non-binary, prefer-not-to-say
-    age_group = db.Column(db.String(20), nullable=True)  # Child (0–12), Teen (13–19), Adult (20–59), Elderly (60+)
-    google_id = db.Column(db.String(100), unique=True, nullable=True)  # Google OAuth ID
-    profile_picture = db.Column(db.String(255), nullable=True)  # Profile picture URL
-    auth_provider = db.Column(db.String(20), default='local')  # 'local' or 'google'
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    
-    def set_password(self, password):
-        self.password_hash = generate_password_hash(password)
-    
-    def check_password(self, password):
-        if not self.password_hash:
-            return False
-        return check_password_hash(self.password_hash, password)
-
-class Script(db.Model):
-    __tablename__ = 'scripts'
-    id = db.Column(db.Integer, primary_key=True)
-    title = db.Column(db.String(255))
-    content = db.Column(db.Text, nullable=False)
-    category = db.Column(db.String(100))
-    difficulty = db.Column(db.String(50))
-    target_duration = db.Column(db.Integer)  # in seconds
-    language = db.Column(db.String(10), default='en')
-    is_active = db.Column(db.Boolean, default=True)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
-
-class ScriptVariantRequirement(db.Model):
-    __tablename__ = 'script_variant_requirements'
-    id = db.Column(db.Integer, primary_key=True)
-    script_id = db.Column(db.Integer, db.ForeignKey('scripts.id'), nullable=False)
-    gender = db.Column(db.String(20), nullable=False)  # male, female, non-binary, prefer-not-to-say
-    age_group = db.Column(db.String(20), nullable=False)  # Child (0-12), Teen (13-19), Adult (20-59), Elderly (60+)
-    target_total = db.Column(db.Integer, default=1, nullable=False)  # How many recordings needed for this variant
-    enabled = db.Column(db.Boolean, default=True, nullable=False)  # Whether this variant is actively being collected
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    
-    script = db.relationship('Script', backref='variant_requirements')
-    
-    # Ensure unique combination of script + gender + age_group
-    __table_args__ = (db.UniqueConstraint('script_id', 'gender', 'age_group', name='unique_script_variant'),)
-
-class Submission(db.Model):
-    __tablename__ = 'submissions'
-    id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)  # Nullable for field-collected submissions
-    script_id = db.Column(db.Integer, db.ForeignKey('scripts.id'), nullable=False)  # Required for script-based recordings
-    text_content = db.Column(db.Text)  # Optional text response
-    transcript = db.Column(db.Text)  # Real-time transcription from Web Speech API
-    audio_filename = db.Column(db.String(255), nullable=False)  # Audio required for script recordings
-    status = db.Column(db.String(20), default='pending')
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    reviewed_at = db.Column(db.DateTime)
-    reviewed_by = db.Column(db.Integer, db.ForeignKey('users.id'))
-    review_notes = db.Column(db.Text)
-    quality_score = db.Column(db.Integer)
-    word_count = db.Column(db.Integer, default=0)
-    duration = db.Column(db.Float, default=0.0)  # Changed from duration_seconds for consistency
-    # Demographic snapshot columns for variant tracking
-    provider_gender = db.Column(db.String(20), nullable=True)  # Snapshot of user's gender at submission time
-    provider_age_group = db.Column(db.String(20), nullable=True)  # Snapshot of user's age_group at submission time
-    
-    # Field collection metadata (when admin collects on behalf of anonymous speaker)
-    collected_by_admin_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)  # Admin who collected this
-    speaker_name = db.Column(db.String(100), nullable=True)  # Anonymous speaker's name (optional)
-    speaker_location = db.Column(db.String(255), nullable=True)  # Where recording was collected
-    is_field_collection = db.Column(db.Boolean, default=False)  # Flag to identify field-collected submissions
-    
-    user = db.relationship('User', foreign_keys=[user_id])
-    script = db.relationship('Script')
-    reviewer = db.relationship('User', foreign_keys=[reviewed_by])
-    collected_by_admin = db.relationship('User', foreign_keys=[collected_by_admin_id])
-
-class BillingRecord(db.Model):
-    __tablename__ = 'billing_records'
-    id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
-    submission_id = db.Column(db.Integer, db.ForeignKey('submissions.id'), nullable=True)
-    amount = db.Column(db.Float, nullable=False)
-    rate_per_word = db.Column(db.Float)  # For provider payments
-    rate_per_submission = db.Column(db.Float)  # For reviewer payments
-    billing_type = db.Column(db.String(20), nullable=False)  # 'provider' or 'reviewer'
-    language_code = db.Column(db.String(10), nullable=False)
-    word_count = db.Column(db.Integer, default=0)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    
-    user = db.relationship('User')
-    submission = db.relationship('Submission')
-
-class Language(db.Model):
-    __tablename__ = 'languages'
-    id = db.Column(db.Integer, primary_key=True)
-    code = db.Column(db.String(10), unique=True, nullable=False)
-    name = db.Column(db.String(100), nullable=False)
-    native_name = db.Column(db.String(100))
-    is_active = db.Column(db.Boolean, default=True)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
-
-class PricingRate(db.Model):
-    __tablename__ = 'pricing_rates'
-    id = db.Column(db.Integer, primary_key=True)
-    language_code = db.Column(db.String(10), db.ForeignKey('languages.code'), nullable=False)
-    provider_rate_per_word = db.Column(db.Float, default=0.01)  # Rate paid to providers
-    reviewer_rate_per_submission = db.Column(db.Float, default=2.00)  # Fixed rate per review
-    currency = db.Column(db.String(10), default='USD')  # Currency code (USD, EUR, BDT, etc.)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-    
-    language = db.relationship('Language')
-
-class AppSettings(db.Model):
-    __tablename__ = 'app_settings'
-    id = db.Column(db.Integer, primary_key=True)
-    setting_key = db.Column(db.String(50), unique=True, nullable=False)
-    setting_value = db.Column(db.String(255), nullable=False)
-    description = db.Column(db.String(255))
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-
-def get_app_setting(key, default_value=''):
-    """Get application setting value with fallback to default"""
-    setting = AppSettings.query.filter_by(setting_key=key).first()
-    return setting.setting_value if setting else default_value
-
-def get_show_earnings():
-    """Get earnings visibility setting as boolean"""
-    setting_value = get_app_setting('show_earnings', 'true')
-    return setting_value.lower() == 'true'
-
-def set_app_setting(key, value, description=''):
-    """Set application setting value"""
-    setting = AppSettings.query.filter_by(setting_key=key).first()
-    if setting:
-        setting.setting_value = value
-        setting.updated_at = datetime.utcnow()
-    else:
-        setting = AppSettings(
-            setting_key=key,
-            setting_value=value,
-            description=description
-        )
-        db.session.add(setting)
-    db.session.commit()
-
-@app.context_processor
-def inject_common_variables():
-    """Make common variables available to all templates"""
-    show_earnings_setting = get_show_earnings()
-    return dict(global_show_earnings=show_earnings_setting)
-
-def require_auth(f):
-    @functools.wraps(f)
-    def decorated_function(*args, **kwargs):
-        # Primary session authentication
-        if 'user_id' in session:
-            return f(*args, **kwargs)
-        
-        # Fallback authentication ONLY in development mode (SECURITY: disabled in production)
-        enable_fallback = os.environ.get('ENABLE_WEBVIEW_FALLBACK', 'false').lower() == 'true'
-        
-        if enable_fallback and not is_production:
-            # Fallback authentication for Replit webview environment (DEV ONLY)
-            fallback_cookies = [
-                request.cookies.get('voicescript_session'),
-                request.cookies.get('replit_auth_backup'),
-                request.cookies.get('session_backup')
-            ]
-            
-            for cookie_auth in fallback_cookies:
-                if cookie_auth:
-                    try:
-                        user_id, user_role, user_name = cookie_auth.split(':', 2)
-                        session.permanent = True
-                        session['user_id'] = int(user_id)
-                        session['user_role'] = user_role
-                        session['user_name'] = user_name
-                        session.modified = True
-                        app.logger.warning(f"Fallback auth used: {user_role} (DEV ONLY)")
-                        return f(*args, **kwargs)
-                    except (ValueError, IndexError):
-                        continue
-            
-            # Last resort: Check URL token for webview authentication (DEV ONLY)
-            auth_token = request.args.get('auth_token')
-            if auth_token:
-                try:
-                    user_id, user_role, user_name = auth_token.split(':', 2)
-                    session.permanent = True
-                    session['user_id'] = int(user_id)
-                    session['user_role'] = user_role
-                    session['user_name'] = user_name
-                    session.modified = True
-                    app.logger.warning(f"Token auth used: {user_role} (DEV ONLY)")
-                    return f(*args, **kwargs)
-                except (ValueError, IndexError):
-                    pass
-        
-        flash('Please log in to access this page.', 'error')
-        return redirect(url_for('login'))
-    return decorated_function
-
-def require_role(required_roles):
-    def decorator(f):
-        @functools.wraps(f)
-        def decorated_function(*args, **kwargs):
-            if 'user_role' not in session or session['user_role'] not in required_roles:
-                flash('Access denied. Insufficient privileges.', 'error')
-                return redirect(url_for('index'))
-            return f(*args, **kwargs)
-        return decorated_function
-    return decorator
+# Register context processor
+app.context_processor(inject_common_variables)
 
 # Routes
 @app.route('/')
@@ -780,6 +569,28 @@ def submissions():
     else:
         user_submissions = Submission.query.filter_by(user_id=session['user_id']).order_by(Submission.created_at.desc()).all()
     return render_template('submissions.html', submissions=user_submissions)
+
+@app.route('/submissions/<int:submission_id>/update-transcript', methods=['POST'])
+@require_auth
+def update_transcript(submission_id):
+    """Update the transcript for a submission"""
+    submission = Submission.query.get_or_404(submission_id)
+    
+    # Check authorization: user can only edit their own submissions, unless admin
+    if session.get('user_role') != 'admin' and submission.user_id != session['user_id']:
+        return jsonify({'success': False, 'error': 'Unauthorized'}), 403
+    
+    data = request.json or {}
+    new_transcript = data.get('transcript', '').strip()
+    
+    try:
+        submission.transcript = new_transcript if new_transcript else None
+        db.session.commit()
+        return jsonify({'success': True, 'message': 'Transcript updated successfully'})
+    except Exception as e:
+        db.session.rollback()
+        app.logger.error(f'Error updating transcript: {str(e)}')
+        return jsonify({'success': False, 'error': 'Failed to update transcript'}), 500
 
 @app.route('/reviews')
 @require_role(['reviewer', 'admin'])
@@ -2239,21 +2050,29 @@ def create_demo_data(force=False):
 
 # Initialize database when the module is loaded (for both dev and production)
 def init_database():
-    """Initialize database with tables and demo data"""
+    """
+    Initialize database with schema and demo data.
+    Supports both migration-based (preferred) and SQLAlchemy-based (fallback) workflows.
+    """
     with app.app_context():
         try:
-            # Create tables if they don't exist
-            db.create_all()
-            app.logger.info("Database tables created successfully")
-            
-            # Add missing columns to scripts table if they don't exist
-            migrate_scripts_table()
+            # Try migration-based approach first (check if schema_version table exists)
+            try:
+                with db.engine.connect() as conn:
+                    result = conn.execute(db.text("SELECT 1 FROM schema_version LIMIT 1"))
+                    result.fetchone()
+                app.logger.info("Database initialized via migrations")
+            except:
+                # Fallback: Use SQLAlchemy db.create_all() if migrations haven't run
+                app.logger.info("Migration table not found, using SQLAlchemy to create schema...")
+                db.create_all()
+                app.logger.info("Database tables created via SQLAlchemy")
             
             # Only create demo data in development mode
             if os.environ.get('FLASK_ENV') != 'production':
                 if User.query.count() == 0:
                     create_demo_data()
-                    app.logger.info("Database initialized with demo data and Google OAuth support")
+                    app.logger.info("Database initialized with demo data")
                 else:
                     app.logger.info("Database already contains data, skipping demo data creation")
             else:
@@ -2264,27 +2083,6 @@ def init_database():
             if os.environ.get('FLASK_ENV') == 'production':
                 raise  # Fail fast in production
 
-def migrate_scripts_table():
-    """Add missing columns to scripts table"""
-    try:
-        # Check if title column exists by trying to query it
-        with db.engine.connect() as conn:
-            conn.execute(db.text('SELECT title FROM scripts LIMIT 1'))
-        print("📋 Scripts table already has new columns")
-    except Exception:
-        print("🔧 Adding missing columns to scripts table...")
-        try:
-            with db.engine.connect() as conn:
-                # Add missing columns
-                conn.execute(db.text('ALTER TABLE scripts ADD COLUMN title VARCHAR(255)'))
-                conn.execute(db.text('ALTER TABLE scripts ADD COLUMN category VARCHAR(100)'))  
-                conn.execute(db.text('ALTER TABLE scripts ADD COLUMN difficulty VARCHAR(50)'))
-                conn.execute(db.text('ALTER TABLE scripts ADD COLUMN target_duration INTEGER'))
-                conn.commit()
-            print("✅ Successfully added missing columns to scripts table")
-        except Exception as e:
-            # Columns might already exist
-            print(f"📋 Scripts table migration skipped (columns may already exist): {e}")
 
 # Health check endpoint for Docker
 @app.route('/health', methods=['GET'])

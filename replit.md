@@ -11,8 +11,39 @@ Preferred communication style: Simple, everyday language.
 ### Backend
 The backend is built with Python 3.11 using the Flask framework. It utilizes Jinja2 for server-side rendering and SQLAlchemy for ORM, connecting to SQLite for development and PostgreSQL for production. Authentication is session-based, including Google OAuth integration, with secure cookie management. Gunicorn serves the application in production.
 
+**Code Organization:**
+- **app.py** (2259 lines): Main Flask app with configuration, routes, and business logic
+- **models.py** (133 lines): SQLAlchemy database models (User, Script, Submission, etc.)
+- **utils.py** (104 lines): Helper functions and decorators (require_auth, require_role, etc.)
+
 ### Database Design
 The system uses SQLite (development) and PostgreSQL (production). Key tables include `users` (with role-based access), `scripts` (recording prompts), `submissions` (user-generated content), `reviews` (quality assessments), `billing_records`, and `sessions`.
+
+### Database Migration System (Flyway-style)
+The platform uses a **database-first migration workflow** where SQL scripts drive schema changes. The app **does NOT use db.create_all()** - all schema management is handled by SQL migrations.
+
+**Local Docker Workflow:**
+1. Write SQL migration scripts in `db/migrations/` with sequential naming: `V001__description.sql`, `V002__description.sql`, etc.
+2. Update Python models in `models.py` to match the database schema
+3. Run: `docker-compose -f docker-compose-secure.yml up --build`
+4. Migrations run automatically via `docker-entrypoint.sh`
+
+**Production Workflow (Railway):**
+1. Create new SQL file: `db/migrations/V00X__your_change.sql`
+2. Write SQL (e.g., `ALTER TABLE users ADD COLUMN phone VARCHAR(20);`)
+3. Update models in `models.py` to reflect changes
+4. Commit and push to GitHub → Railway automatically runs migrations via `docker-entrypoint.sh`
+
+**Direct Python (Development):**
+1. Run: `python run.py` (uses hybrid approach: migrations or SQLAlchemy fallback)
+
+**Key Features:**
+- **Pure Database-First**: No `db.create_all()` - schema managed exclusively by SQL migrations
+- Sequential execution based on version numbers
+- Checksum validation prevents modification of applied migrations
+- Transactional execution with automatic rollback on errors
+- Execution time tracking for performance monitoring
+- Migration tracking in `schema_version` table
 
 ### Data Collection Workflow
 1. **Admin Script Creation**: Administrators create recording scripts.

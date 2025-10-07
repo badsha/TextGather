@@ -114,20 +114,21 @@
                         <audio id="recordedAudio" controls class="w-full max-w-md mx-auto"></audio>
                     </div>
 
-                    <!-- Real-time Transcript -->
+                    <!-- Real-time Transcript (Editable) -->
                     <div id="transcriptContainer" class="hidden mt-4 bg-blue-50 border-2 border-blue-200 rounded-lg p-4 max-w-md mx-auto">
                         <div class="flex items-start space-x-2 mb-2">
                             <i class="fas fa-microphone-alt text-blue-600 mt-1"></i>
                             <div class="flex-1">
-                                <h5 class="font-medium text-blue-900 mb-1">Live Transcript</h5>
-                                <div id="transcript" class="text-gray-700 min-h-[60px] whitespace-pre-wrap leading-relaxed">
-                                    Listening...
-                                </div>
+                                <h5 class="font-medium text-blue-900 mb-1">Live Transcript (Editable)</h5>
+                                <textarea id="transcript" 
+                                    class="w-full text-gray-700 min-h-[80px] p-2 border border-blue-300 rounded bg-white whitespace-pre-wrap leading-relaxed resize-y"
+                                    placeholder="Listening..." 
+                                    data-testid="textarea-transcript"></textarea>
                             </div>
                         </div>
                         <div class="text-xs text-blue-600">
                             <i class="fas fa-info-circle mr-1"></i>
-                            <span id="transcriptStatus">Speech recognition active</span>
+                            <span id="transcriptStatus">Speech recognition active - You can edit the text</span>
                         </div>
                     </div>
 
@@ -331,8 +332,8 @@ class FieldCollectionRecorder {
                             interimTranscript += transcript;
                         }
                     }
-                    this.transcript.innerHTML = finalTranscript + 
-                        '<span style="color: #9CA3AF;">' + interimTranscript + '</span>';
+                    // Update textarea value (user can edit this)
+                    this.transcript.value = finalTranscript + interimTranscript;
                 };
                 
                 this.speechRecognition.onerror = (event) => {
@@ -350,7 +351,7 @@ class FieldCollectionRecorder {
                 try {
                     this.speechRecognition.start();
                     this.transcriptContainer.classList.remove('hidden');
-                    this.transcript.textContent = 'Listening...';
+                    this.transcript.value = 'Listening...';
                 } catch (error) {
                     console.error('Speech recognition error:', error);
                 }
@@ -415,9 +416,10 @@ class FieldCollectionRecorder {
                 formData.append('speaker_location', this.speakerLocation.value.trim());
             }
             
-            // Add transcript if available
-            if (this.finalTranscript) {
-                formData.append('transcript', this.finalTranscript);
+            // Add transcript if available (get from textarea in case user edited it)
+            const transcriptValue = this.transcript.value.trim();
+            if (transcriptValue && transcriptValue !== 'Listening...') {
+                formData.append('transcript', transcriptValue);
             }
             
             const response = await fetch('/admin/field-collect/submit', {

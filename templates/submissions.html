@@ -1,0 +1,204 @@
+{% extends "base.html" %}
+
+{% block title %}My Submissions - VoiceScript Collector{% endblock %}
+
+{% block content %}
+<div class="container mx-auto px-4 py-8">
+    <h1 class="text-3xl font-bold mb-6">My Submissions</h1>
+    
+    {% if submissions %}
+    <div class="bg-white rounded-lg shadow overflow-hidden">
+        <div class="overflow-x-auto">
+            <table class="min-w-full divide-y divide-gray-200">
+                <thead class="bg-gray-50">
+                    <tr>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Script</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Audio</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Transcript</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                    </tr>
+                </thead>
+                <tbody class="bg-white divide-y divide-gray-200">
+                    {% for submission in submissions %}
+                    <tr data-testid="row-submission-{{ submission.id }}">
+                        <td class="px-6 py-4 whitespace-nowrap">
+                            <div class="text-sm font-medium text-gray-900" data-testid="text-script-{{ submission.id }}">
+                                {{ submission.script.title if submission.script else 'Custom Content' }}
+                            </div>
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap">
+                            {% if submission.audio_filename %}
+                            <audio controls class="w-48" data-testid="audio-player-{{ submission.id }}">
+                                <source src="{{ url_for('uploaded_file', filename=submission.audio_filename) }}" type="audio/webm">
+                                Your browser does not support the audio element.
+                            </audio>
+                            {% else %}
+                            <span class="text-gray-400">No audio</span>
+                            {% endif %}
+                        </td>
+                        <td class="px-6 py-4">
+                            <div id="transcript-display-{{ submission.id }}" class="text-sm text-gray-700 max-w-md" data-testid="text-transcript-{{ submission.id }}">
+                                {{ submission.transcript if submission.transcript else 'No transcript' }}
+                            </div>
+                            <textarea id="transcript-edit-{{ submission.id }}" 
+                                class="hidden w-full text-sm text-gray-700 p-2 border border-gray-300 rounded resize-y min-h-[80px]" 
+                                data-testid="textarea-edit-transcript-{{ submission.id }}">{{ submission.transcript or '' }}</textarea>
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap">
+                            <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full 
+                                {% if submission.status == 'approved' %}bg-green-100 text-green-800
+                                {% elif submission.status == 'rejected' %}bg-red-100 text-red-800
+                                {% else %}bg-yellow-100 text-yellow-800{% endif %}" 
+                                data-testid="status-{{ submission.id }}">
+                                {{ submission.status.capitalize() }}
+                            </span>
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500" data-testid="date-{{ submission.id }}">
+                            {{ submission.created_at.strftime('%Y-%m-%d %H:%M') }}
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm">
+                            <button onclick="editTranscript({{ submission.id }})" 
+                                id="edit-btn-{{ submission.id }}"
+                                class="text-blue-600 hover:text-blue-900 mr-2" 
+                                data-testid="button-edit-{{ submission.id }}">
+                                <i class="fas fa-edit mr-1"></i> Edit
+                            </button>
+                            <button onclick="saveTranscript({{ submission.id }})" 
+                                id="save-btn-{{ submission.id }}"
+                                class="hidden text-green-600 hover:text-green-900 mr-2" 
+                                data-testid="button-save-{{ submission.id }}">
+                                <i class="fas fa-save mr-1"></i> Save
+                            </button>
+                            <button onclick="cancelEdit({{ submission.id }})" 
+                                id="cancel-btn-{{ submission.id }}"
+                                class="hidden text-gray-600 hover:text-gray-900" 
+                                data-testid="button-cancel-{{ submission.id }}">
+                                Cancel
+                            </button>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% else %}
+    <div class="bg-white rounded-lg shadow p-6 text-center text-gray-500">
+        <i class="fas fa-inbox text-4xl mb-4"></i>
+        <p class="text-lg">No submissions yet</p>
+        <a href="{{ url_for('record_list') }}" class="mt-4 inline-block text-blue-600 hover:text-blue-800" data-testid="link-start-recording">
+            Start recording <i class="fas fa-arrow-right ml-1"></i>
+        </a>
+    </div>
+    {% endif %}
+</div>
+
+<script>
+function editTranscript(submissionId) {
+    const display = document.getElementById(`transcript-display-${submissionId}`);
+    const textarea = document.getElementById(`transcript-edit-${submissionId}`);
+    const editBtn = document.getElementById(`edit-btn-${submissionId}`);
+    const saveBtn = document.getElementById(`save-btn-${submissionId}`);
+    const cancelBtn = document.getElementById(`cancel-btn-${submissionId}`);
+    
+    display.classList.add('hidden');
+    textarea.classList.remove('hidden');
+    editBtn.classList.add('hidden');
+    saveBtn.classList.remove('hidden');
+    cancelBtn.classList.remove('hidden');
+    textarea.focus();
+}
+
+function cancelEdit(submissionId) {
+    const display = document.getElementById(`transcript-display-${submissionId}`);
+    const textarea = document.getElementById(`transcript-edit-${submissionId}`);
+    const editBtn = document.getElementById(`edit-btn-${submissionId}`);
+    const saveBtn = document.getElementById(`save-btn-${submissionId}`);
+    const cancelBtn = document.getElementById(`cancel-btn-${submissionId}`);
+    
+    // Reset textarea to original value (handle "No transcript" case)
+    const displayText = display.textContent.trim();
+    textarea.value = displayText === 'No transcript' ? '' : displayText;
+    
+    display.classList.remove('hidden');
+    textarea.classList.add('hidden');
+    editBtn.classList.remove('hidden');
+    saveBtn.classList.add('hidden');
+    cancelBtn.classList.add('hidden');
+}
+
+async function saveTranscript(submissionId) {
+    const textarea = document.getElementById(`transcript-edit-${submissionId}`);
+    const display = document.getElementById(`transcript-display-${submissionId}`);
+    const saveBtn = document.getElementById(`save-btn-${submissionId}`);
+    
+    const newTranscript = textarea.value.trim();
+    
+    // Disable save button and show loading
+    saveBtn.disabled = true;
+    saveBtn.innerHTML = '<i class="fas fa-spinner fa-spin mr-1"></i> Saving...';
+    
+    try {
+        const response = await fetch(`/submissions/${submissionId}/update-transcript`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ transcript: newTranscript })
+        });
+        
+        // Always reset button state first before handling response
+        saveBtn.disabled = false;
+        saveBtn.innerHTML = '<i class="fas fa-save mr-1"></i> Save';
+        
+        if (!response.ok) {
+            // Handle HTTP errors (4xx, 5xx)
+            const errorMsg = response.status === 403 ? 'You do not have permission to edit this transcript.' : 'Server error. Please try again.';
+            const errorToast = document.createElement('div');
+            errorToast.className = 'fixed top-4 right-4 bg-red-500 text-white px-6 py-3 rounded-lg shadow-lg z-50';
+            errorToast.innerHTML = `<i class="fas fa-exclamation-circle mr-2"></i> ${errorMsg}`;
+            document.body.appendChild(errorToast);
+            setTimeout(() => errorToast.remove(), 4000);
+            return;
+        }
+        
+        const result = await response.json();
+        
+        if (result.success) {
+            // Update display text FIRST (before cancelEdit hides textarea and shows display)
+            display.textContent = newTranscript || 'No transcript';
+            
+            // Then cancel edit mode to show updated display
+            cancelEdit(submissionId);
+            
+            // Show success message
+            const successMsg = document.createElement('div');
+            successMsg.className = 'fixed top-4 right-4 bg-green-500 text-white px-6 py-3 rounded-lg shadow-lg z-50';
+            successMsg.innerHTML = '<i class="fas fa-check-circle mr-2"></i> Transcript updated successfully';
+            document.body.appendChild(successMsg);
+            setTimeout(() => successMsg.remove(), 3000);
+        } else {
+            // Handle application-level errors
+            const errorToast = document.createElement('div');
+            errorToast.className = 'fixed top-4 right-4 bg-red-500 text-white px-6 py-3 rounded-lg shadow-lg z-50';
+            errorToast.innerHTML = `<i class="fas fa-exclamation-circle mr-2"></i> ${result.error || 'Failed to save'}`;
+            document.body.appendChild(errorToast);
+            setTimeout(() => errorToast.remove(), 4000);
+        }
+    } catch (error) {
+        // Always ensure button is reset on network/parsing errors
+        saveBtn.disabled = false;
+        saveBtn.innerHTML = '<i class="fas fa-save mr-1"></i> Save';
+        
+        console.error('Error updating transcript:', error);
+        const errorToast = document.createElement('div');
+        errorToast.className = 'fixed top-4 right-4 bg-red-500 text-white px-6 py-3 rounded-lg shadow-lg z-50';
+        errorToast.innerHTML = '<i class="fas fa-exclamation-circle mr-2"></i> Network error. Please try again.';
+        document.body.appendChild(errorToast);
+        setTimeout(() => errorToast.remove(), 4000);
+    }
+}
+</script>
+{% endblock %}
