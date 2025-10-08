@@ -47,8 +47,14 @@ app.config['SQLALCHEMY_DATABASE_URI'] = database_url
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 # Production security settings
-# Only use secure cookies if explicitly running on HTTPS (not just production mode)
-use_https = os.environ.get('USE_HTTPS', 'false').lower() == 'true'
+# Auto-detect HTTPS for production or when explicitly set
+# Railway, Heroku, and most cloud platforms run on HTTPS
+use_https = (
+    os.environ.get('USE_HTTPS', 'false').lower() == 'true' or  # Explicit override
+    is_production or  # Enable secure cookies in production by default
+    'railway.app' in os.environ.get('RAILWAY_STATIC_URL', '') or  # Railway detection
+    'herokuapp.com' in os.environ.get('HEROKU_APP_NAME', '')  # Heroku detection
+)
 app.config['PREFERRED_URL_SCHEME'] = 'https' if use_https else 'http'
 app.config['SESSION_COOKIE_SECURE'] = use_https  # Only secure on HTTPS
 app.config['SESSION_COOKIE_HTTPONLY'] = True
