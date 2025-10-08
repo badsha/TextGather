@@ -624,13 +624,17 @@ def admin_scripts():
 @require_auth
 def submit_recording():
     script_id = request.form.get('script_id')
+    language_id = request.form.get('language_id')
     text_content = request.form.get('text_content', '').strip()
     transcript = request.form.get('transcript', '').strip()
     audio_file = request.files.get('audio_file')
     
-    # Validate required fields - for script-based recordings, audio is mandatory
+    # Validate required fields - for script-based recordings, audio and language are mandatory
     if not script_id:
         return jsonify({'success': False, 'error': 'Script selection is required'}), 400
+    
+    if not language_id:
+        return jsonify({'success': False, 'error': 'Language selection is required'}), 400
     
     if not audio_file or not audio_file.filename:
         return jsonify({'success': False, 'error': 'Audio recording is required for script submissions'}), 400
@@ -665,6 +669,7 @@ def submit_recording():
         submission = Submission(
             user_id=session['user_id'],
             script_id=int(script_id) if script_id and script_id != '0' else None,
+            language_id=int(language_id),
             text_content=text_content,
             transcript=transcript if transcript else None,
             audio_filename=audio_filename,
@@ -676,12 +681,16 @@ def submit_recording():
         )
         
         db.session.add(submission)
+        db.session.flush()  # Flush to get the ID before commit
+        submission_id = submission.id
         db.session.commit()
         
-        return jsonify({'success': True, 'message': 'Recording submitted successfully!', 'submission_id': submission.id})
+        return jsonify({'success': True, 'message': 'Recording submitted successfully!', 'submission_id': submission_id})
     except Exception as e:
         db.session.rollback()
         app.logger.error(f'Error submitting recording: {str(e)}')
+        import traceback
+        app.logger.error(f'Traceback: {traceback.format_exc()}')
         return jsonify({'success': False, 'error': 'Failed to save recording. Please try again.'}), 500
 
 # Field Collection Routes for Admins
@@ -697,18 +706,23 @@ def admin_field_collect():
 def submit_field_collection():
     """Handle field-collected recording submissions by admins"""
     script_id = request.form.get('script_id')
+    language_id = request.form.get('language_id')
     audio_file = request.files.get('audio_file')
     
     # Speaker metadata
     speaker_name = request.form.get('speaker_name', '').strip()
     speaker_location = request.form.get('speaker_location', '').strip()
     transcript = request.form.get('transcript', '').strip()
+    transcript_language_id = request.form.get('transcript_language_id')  # Language of the transcript text
     provider_gender = request.form.get('provider_gender')
     provider_age_group = request.form.get('provider_age_group')
     
     # Validate required fields
     if not script_id:
         return jsonify({'success': False, 'message': 'Script selection is required'}), 400
+    
+    if not language_id:
+        return jsonify({'success': False, 'message': 'Language selection is required'}), 400
     
     if not audio_file or not audio_file.filename:
         return jsonify({'success': False, 'message': 'Audio recording is required'}), 400
@@ -734,8 +748,10 @@ def submit_field_collection():
     submission = Submission(
         user_id=None,  # No user for field collections
         script_id=int(script_id),
+        language_id=int(language_id),
         text_content='',
         transcript=transcript if transcript else None,
+        transcript_language_id=int(transcript_language_id) if transcript_language_id else None,
         audio_filename=audio_filename,
         word_count=word_count,
         status='approved',  # Auto-approve field collections
@@ -1597,7 +1613,15 @@ def admin_users():
 @require_role(['admin'])
 def admin_data_export():
     """View all recordings with metadata for export"""
-    submissions = Submission.query.order_by(Submission.created_at.desc()).all()
+    # Get language filter from query params
+    language_filter = request.args.get('language', type=int)
+    
+    # Build query with optional language filter
+    query = Submission.query
+    if language_filter:
+        query = query.filter_by(language_id=language_filter)
+    
+    submissions = query.order_by(Submission.created_at.desc()).all()
     
     # Enrich submissions with related data
     export_data = []
@@ -1622,13 +1646,30 @@ def admin_data_export():
             'speaker_name': speaker_name
         })
     
-    return render_template('admin_data_export.html', export_data=export_data, total_count=len(export_data))
+    # Get all active languages for the filter dropdown
+    languages = Language.query.filter_by(is_active=True).order_by(Language.name).all()
+    
+    return render_template(
+        'admin_data_export.html', 
+        export_data=export_data, 
+        total_count=len(export_data),
+        languages=languages,
+        selected_language=str(language_filter) if language_filter else ''
+    )
 
 @app.route('/admin/data-export/csv')
 @require_role(['admin'])
 def export_data_csv():
     """Export all recordings metadata as CSV"""
-    submissions = Submission.query.order_by(Submission.created_at.desc()).all()
+    # Get language filter from query params
+    language_filter = request.args.get('language', type=int)
+    
+    # Build query with optional language filter
+    query = Submission.query
+    if language_filter:
+        query = query.filter_by(language_id=language_filter)
+    
+    submissions = query.order_by(Submission.created_at.desc()).all()
     
     # Create CSV in memory
     output = io.StringIO()

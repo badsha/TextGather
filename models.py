@@ -60,8 +60,10 @@ class Submission(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)  # Nullable for field-collected submissions
     script_id = db.Column(db.Integer, db.ForeignKey('scripts.id'), nullable=False)  # Required for script-based recordings
+    language_id = db.Column(db.Integer, db.ForeignKey('languages.id'), nullable=False)  # Language of recording - selected by user
     text_content = db.Column(db.Text)  # Optional text response
     transcript = db.Column(db.Text)  # Real-time transcription from Web Speech API
+    transcript_language_id = db.Column(db.Integer, db.ForeignKey('languages.id'), nullable=True)  # Language of transcript (may differ from audio)
     audio_filename = db.Column(db.String(255), nullable=False)  # Audio required for script recordings
     status = db.Column(db.String(20), default='pending')
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
@@ -83,6 +85,8 @@ class Submission(db.Model):
     
     user = db.relationship('User', foreign_keys=[user_id])
     script = db.relationship('Script')
+    language = db.relationship('Language', foreign_keys=[language_id])
+    transcript_language = db.relationship('Language', foreign_keys=[transcript_language_id])
     reviewer = db.relationship('User', foreign_keys=[reviewed_by])
     collected_by_admin = db.relationship('User', foreign_keys=[collected_by_admin_id])
 
