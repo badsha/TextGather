@@ -1918,6 +1918,32 @@ def get_language(language_code):
         'is_active': language.is_active
     })
 
+@app.route('/api/languages/<language_code>', methods=['DELETE'])
+@require_role(['admin'])
+def delete_language(language_code):
+    """Delete a language and its pricing"""
+    language = Language.query.filter_by(code=language_code).first()
+    if not language:
+        return jsonify({'success': False, 'error': 'Language not found'}), 404
+    
+    # Check if language is used in any submissions
+    submission_count = Submission.query.filter_by(language_id=language.id).count()
+    if submission_count > 0:
+        return jsonify({
+            'success': False, 
+            'error': f'Cannot delete language. {submission_count} submission(s) use this language.'
+        }), 400
+    
+    # Delete associated pricing
+    PricingRate.query.filter_by(language_code=language_code).delete()
+    
+    # Delete the language
+    db.session.delete(language)
+    db.session.commit()
+    
+    app.logger.info(f"Language deleted: {language_code}")
+    return jsonify({'success': True})
+
 @app.route('/api/pricing/<language_code>', methods=['GET'])
 @require_role(['admin'])
 def get_pricing(language_code):
