@@ -47,16 +47,11 @@ app.config['SQLALCHEMY_DATABASE_URI'] = database_url
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 # Production security settings
-# Auto-detect HTTPS for production or when explicitly set
-# Railway, Heroku, and most cloud platforms run on HTTPS
-use_https = (
-    os.environ.get('USE_HTTPS', 'false').lower() == 'true' or  # Explicit override
-    is_production or  # Enable secure cookies in production by default
-    'railway.app' in os.environ.get('RAILWAY_STATIC_URL', '') or  # Railway detection
-    'herokuapp.com' in os.environ.get('HEROKU_APP_NAME', '')  # Heroku detection
-)
+# Only use secure cookies if explicitly enabled via environment variable
+# This allows flexibility for different deployment environments and proxy configurations
+use_https = os.environ.get('USE_HTTPS', 'false').lower() == 'true'
 app.config['PREFERRED_URL_SCHEME'] = 'https' if use_https else 'http'
-app.config['SESSION_COOKIE_SECURE'] = use_https  # Only secure on HTTPS
+app.config['SESSION_COOKIE_SECURE'] = use_https
 app.config['SESSION_COOKIE_HTTPONLY'] = True
 app.config['WTF_CSRF_ENABLED'] = is_production
 
@@ -71,23 +66,12 @@ app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
 }
 app.config['UPLOAD_FOLDER'] = 'uploads'
 
-# Session configuration - production vs development
-if is_production:
-    # Production session settings
-    app.config['SESSION_COOKIE_NAME'] = 'voicescript_session'
-    app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
-    app.config['SESSION_COOKIE_DOMAIN'] = None
-    app.config['SESSION_COOKIE_PATH'] = '/'
-    app.config['PERMANENT_SESSION_LIFETIME'] = 3600  # 1 hour
-else:
-    # Development session settings for Replit environment
-    app.config['SESSION_COOKIE_NAME'] = 'voicescript_session'
-    app.config['SESSION_COOKIE_HTTPONLY'] = False
-    app.config['SESSION_COOKIE_SECURE'] = False
-    app.config['SESSION_COOKIE_SAMESITE'] = 'None'
-    app.config['SESSION_COOKIE_DOMAIN'] = None
-    app.config['SESSION_COOKIE_PATH'] = '/'
-    app.config['PERMANENT_SESSION_LIFETIME'] = 3600
+# Universal session configuration (works for both dev and production)
+app.config['SESSION_COOKIE_NAME'] = 'voicescript_session'
+app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
+app.config['SESSION_COOKIE_DOMAIN'] = None
+app.config['SESSION_COOKIE_PATH'] = '/'
+app.config['PERMANENT_SESSION_LIFETIME'] = 3600  # 1 hour
 
 # Google OAuth Configuration
 app.config['GOOGLE_CLIENT_ID'] = os.environ.get('GOOGLE_CLIENT_ID')
